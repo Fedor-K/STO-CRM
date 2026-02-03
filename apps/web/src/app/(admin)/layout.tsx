@@ -10,13 +10,12 @@ const navigation = [
   { name: 'Дашборд', href: '/dashboard' },
   { name: 'Записи', href: '/appointments' },
   { name: 'Заказ-наряды', href: '/work-orders' },
-  { name: 'Клиенты', href: '/clients' },
   { name: 'Автомобили', href: '/vehicles' },
   { name: 'Услуги', href: '/services' },
   { name: 'Посты', href: '/service-bays' },
   { name: 'Склад', href: '/inventory' },
   { name: 'Финансы', href: '/finance' },
-  { name: 'Персонал', href: '/staff' },
+  { name: 'Пользователи', href: '/users' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
