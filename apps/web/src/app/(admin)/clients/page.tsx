@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 
+// --- Types ---
+
 interface ClientData {
   id: string;
   email: string;
@@ -20,12 +22,87 @@ interface VehicleData {
   model: string;
   licensePlate: string | null;
   year: number | null;
+  vin: string | null;
+  color: string | null;
+  mileage: number | null;
 }
 
-interface PaginatedResponse {
-  data: ClientData[];
+interface AppointmentData {
+  id: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+  status: string;
+  notes: string | null;
+  vehicle: { make: string; model: string; licensePlate: string | null };
+  serviceBay: { name: string } | null;
+}
+
+interface WorkOrderData {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalAmount: string | number;
+  createdAt: string;
+  vehicle: { make: string; model: string; licensePlate: string | null };
+  mechanic: { firstName: string; lastName: string } | null;
+  _count: { items: number };
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
   meta: { total: number; page: number; limit: number; totalPages: number };
 }
+
+// --- Helpers ---
+
+const APPT_STATUS: Record<string, string> = {
+  PENDING: 'Ожидает',
+  CONFIRMED: 'Подтверждена',
+  IN_PROGRESS: 'В работе',
+  COMPLETED: 'Завершена',
+  CANCELLED: 'Отменена',
+  NO_SHOW: 'Не явился',
+};
+
+const WO_STATUS: Record<string, string> = {
+  NEW: 'Новый',
+  DIAGNOSED: 'Диагностика',
+  APPROVED: 'Согласован',
+  IN_PROGRESS: 'В работе',
+  PAUSED: 'Пауза',
+  COMPLETED: 'Выполнен',
+  INVOICED: 'Счёт',
+  PAID: 'Оплачен',
+  CLOSED: 'Закрыт',
+  CANCELLED: 'Отменён',
+};
+
+const WO_STATUS_COLOR: Record<string, string> = {
+  NEW: 'bg-gray-100 text-gray-700',
+  DIAGNOSED: 'bg-blue-100 text-blue-700',
+  APPROVED: 'bg-indigo-100 text-indigo-700',
+  IN_PROGRESS: 'bg-yellow-100 text-yellow-700',
+  COMPLETED: 'bg-green-100 text-green-700',
+  CLOSED: 'bg-gray-200 text-gray-600',
+  CANCELLED: 'bg-red-100 text-red-600',
+  PAID: 'bg-emerald-100 text-emerald-700',
+};
+
+function formatMoney(amount: number | string): string {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (!num) return '0 ₽';
+  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function formatDateTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+// --- Page ---
 
 export default function ClientsPage() {
   const queryClient = useQueryClient();
@@ -33,18 +110,12 @@ export default function ClientsPage() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editClient, setEditClient] = useState<ClientData | null>(null);
-  const [expandedClient, setExpandedClient] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery<PaginatedResponse>({
+  const { data, isLoading } = useQuery<PaginatedResponse<ClientData>>({
     queryKey: ['clients', page, search],
     queryFn: () =>
       apiFetch(`/users?page=${page}&limit=20&sort=createdAt&order=desc&role=CLIENT${search ? `&search=${encodeURIComponent(search)}` : ''}`),
-  });
-
-  const { data: vehicles } = useQuery<{ data: VehicleData[] }>({
-    queryKey: ['client-vehicles', expandedClient],
-    queryFn: () => apiFetch(`/vehicles?limit=50&clientId=${expandedClient}`),
-    enabled: !!expandedClient,
   });
 
   const deleteMutation = useMutation({
@@ -67,7 +138,7 @@ export default function ClientsPage() {
       <div className="mt-4">
         <input
           type="text"
-          placeholder="Поиск по имени, телефону, email..."
+          placeholder="Поиск по имени, телефону..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
@@ -80,73 +151,21 @@ export default function ClientsPage() {
         <div className="mt-8 text-center text-gray-500">Клиентов не найдено</div>
       ) : (
         <>
-          <div className="mt-4 overflow-hidden rounded-lg border border-gray-200 bg-white">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Клиент</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Телефон</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Дата регистрации</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Действия</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {data.data.map((client) => (
-                  <tr key={client.id}>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => setExpandedClient(expandedClient === client.id ? null : client.id)}
-                        className="text-left"
-                      >
-                        <div className="text-sm font-medium text-gray-900">
-                          {client.firstName} {client.lastName}
-                        </div>
-                        <div className="text-xs text-primary-600 hover:underline">
-                          {expandedClient === client.id ? 'Скрыть авто' : 'Показать авто'}
-                        </div>
-                      </button>
-                      {expandedClient === client.id && (
-                        <div className="mt-2 space-y-1">
-                          {vehicles?.data?.length ? (
-                            vehicles.data.map((v) => (
-                              <div key={v.id} className="rounded bg-gray-50 px-2 py-1 text-xs text-gray-600">
-                                {v.make} {v.model}
-                                {v.year ? ` (${v.year})` : ''}
-                                {v.licensePlate ? ` — ${v.licensePlate}` : ''}
-                              </div>
-                            ))
-                          ) : (
-                            <div className="text-xs text-gray-400">Нет автомобилей</div>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">{client.phone || '—'}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                      {new Date(client.createdAt).toLocaleDateString('ru-RU')}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
-                      <button
-                        onClick={() => { setEditClient(client); setShowModal(true); }}
-                        className="mr-3 text-primary-600 hover:text-primary-800"
-                      >
-                        Изменить
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Удалить клиента ${client.firstName} ${client.lastName}?`)) {
-                            deleteMutation.mutate(client.id);
-                          }
-                        }}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Удалить
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="mt-4 space-y-3">
+            {data.data.map((client) => (
+              <ClientCard
+                key={client.id}
+                client={client}
+                isExpanded={expandedId === client.id}
+                onToggle={() => setExpandedId(expandedId === client.id ? null : client.id)}
+                onEdit={() => { setEditClient(client); setShowModal(true); }}
+                onDelete={() => {
+                  if (confirm(`Удалить клиента ${client.firstName} ${client.lastName}?`)) {
+                    deleteMutation.mutate(client.id);
+                  }
+                }}
+              />
+            ))}
           </div>
 
           {data.meta.totalPages > 1 && (
@@ -189,7 +208,178 @@ export default function ClientsPage() {
   );
 }
 
-// --- Helpers ---
+// --- Client Card ---
+
+function ClientCard({
+  client,
+  isExpanded,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  client: ClientData;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { data: vehicles } = useQuery<PaginatedResponse<VehicleData>>({
+    queryKey: ['client-vehicles', client.id],
+    queryFn: () => apiFetch(`/vehicles?limit=50&clientId=${client.id}`),
+    enabled: isExpanded,
+  });
+
+  const { data: appointments } = useQuery<PaginatedResponse<AppointmentData>>({
+    queryKey: ['client-appointments', client.id],
+    queryFn: () => apiFetch(`/appointments?limit=20&sort=scheduledStart&order=desc&clientId=${client.id}`),
+    enabled: isExpanded,
+  });
+
+  const { data: workOrders } = useQuery<PaginatedResponse<WorkOrderData>>({
+    queryKey: ['client-work-orders', client.id],
+    queryFn: () => apiFetch(`/work-orders?limit=20&sort=createdAt&order=desc&clientId=${client.id}`),
+    enabled: isExpanded,
+  });
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+      {/* Header — always visible */}
+      <div
+        onClick={onToggle}
+        className="flex cursor-pointer items-center justify-between px-5 py-4 hover:bg-gray-50"
+      >
+        <div className="flex items-center gap-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
+            {client.firstName[0]}{client.lastName[0]}
+          </div>
+          <div>
+            <div className="text-sm font-semibold text-gray-900">
+              {client.firstName} {client.lastName}
+            </div>
+            <div className="text-xs text-gray-500">{client.phone || 'Нет телефона'}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-400">с {formatDate(client.createdAt)}</span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onEdit(); }}
+            className="text-xs text-primary-600 hover:text-primary-800"
+          >
+            Изменить
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="text-xs text-red-500 hover:text-red-700"
+          >
+            Удалить
+          </button>
+          <svg
+            className={`h-5 w-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </div>
+
+      {/* Expanded content */}
+      {isExpanded && (
+        <div className="border-t border-gray-100 px-5 py-4 space-y-5">
+          {/* Vehicles */}
+          <div>
+            <h4 className="text-xs font-semibold uppercase text-gray-500">Автомобили</h4>
+            {vehicles?.data?.length ? (
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {vehicles.data.map((v) => (
+                  <div key={v.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                    <div className="text-sm font-medium text-gray-900">
+                      {v.make} {v.model}
+                      {v.year ? ` (${v.year})` : ''}
+                    </div>
+                    <div className="mt-1 space-y-0.5 text-xs text-gray-500">
+                      {v.licensePlate && <div>Госномер: <span className="font-medium text-gray-700">{v.licensePlate}</span></div>}
+                      {v.vin && <div>VIN: <span className="font-mono text-gray-600">{v.vin}</span></div>}
+                      {v.color && <div>Цвет: {v.color}</div>}
+                      {v.mileage != null && <div>Пробег: {v.mileage.toLocaleString('ru-RU')} км</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-gray-400">Нет автомобилей</p>
+            )}
+          </div>
+
+          {/* Appointments */}
+          <div>
+            <h4 className="text-xs font-semibold uppercase text-gray-500">Записи</h4>
+            {appointments?.data?.length ? (
+              <div className="mt-2 space-y-1.5">
+                {appointments.data.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between rounded bg-gray-50 px-3 py-2 text-xs">
+                    <div>
+                      <span className="font-medium text-gray-700">{formatDateTime(a.scheduledStart)}</span>
+                      <span className="ml-2 text-gray-500">
+                        {a.vehicle.make} {a.vehicle.model}
+                        {a.vehicle.licensePlate ? ` (${a.vehicle.licensePlate})` : ''}
+                      </span>
+                      {a.serviceBay && <span className="ml-2 text-gray-400">{a.serviceBay.name}</span>}
+                    </div>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      a.status === 'CANCELLED' || a.status === 'NO_SHOW' ? 'bg-red-100 text-red-600' :
+                      a.status === 'COMPLETED' || a.status === 'IN_PROGRESS' ? 'bg-green-100 text-green-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>
+                      {APPT_STATUS[a.status] || a.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-gray-400">Нет записей</p>
+            )}
+          </div>
+
+          {/* Work Orders */}
+          <div>
+            <h4 className="text-xs font-semibold uppercase text-gray-500">Заказ-наряды</h4>
+            {workOrders?.data?.length ? (
+              <div className="mt-2 space-y-1.5">
+                {workOrders.data.map((wo) => (
+                  <div key={wo.id} className="flex items-center justify-between rounded bg-gray-50 px-3 py-2 text-xs">
+                    <div>
+                      <span className="font-bold text-primary-600">{wo.orderNumber}</span>
+                      <span className="ml-2 text-gray-500">
+                        {wo.vehicle.make} {wo.vehicle.model}
+                        {wo.vehicle.licensePlate ? ` (${wo.vehicle.licensePlate})` : ''}
+                      </span>
+                      {wo.mechanic && (
+                        <span className="ml-2 text-gray-400">
+                          {wo.mechanic.firstName} {wo.mechanic.lastName}
+                        </span>
+                      )}
+                      <span className="ml-2 text-gray-400">{formatDate(wo.createdAt)}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-700">{formatMoney(wo.totalAmount)}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${WO_STATUS_COLOR[wo.status] || 'bg-gray-100'}`}>
+                        {WO_STATUS[wo.status] || wo.status}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-xs text-gray-400">Нет заказ-нарядов</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Helpers (text sanitization) ---
 
 const CYR_TO_LAT: Record<string, string> = {
   'А':'A','В':'B','Е':'E','К':'K','М':'M','Н':'H','О':'O','Р':'P','С':'C','Т':'T','У':'Y','Х':'X',
