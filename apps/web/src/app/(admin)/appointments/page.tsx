@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 
 interface AppointmentData {
   id: string;
@@ -53,9 +54,19 @@ function formatTime(iso: string): string {
 
 export default function AppointmentsPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
+
+  const createWOMutation = useMutation({
+    mutationFn: (appointmentId: string) =>
+      apiFetch(`/work-orders/from-appointment/${appointmentId}`, { method: 'POST' }),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      router.push(`/work-orders/${data.id}`);
+    },
+  });
 
   const { data, isLoading } = useQuery<PaginatedResponse>({
     queryKey: ['appointments', page, statusFilter],
@@ -149,16 +160,29 @@ export default function AppointmentsPage() {
                       </select>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
-                      <button
-                        onClick={() => {
-                          if (confirm(`Удалить запись от ${formatDateTime(appt.scheduledStart)}?`)) {
-                            deleteMutation.mutate(appt.id);
-                          }
-                        }}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        Удалить
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            if (confirm('Создать заказ-наряд из этой записи?')) {
+                              createWOMutation.mutate(appt.id);
+                            }
+                          }}
+                          disabled={createWOMutation.isPending}
+                          className="text-primary-600 hover:text-primary-800 disabled:opacity-50"
+                        >
+                          Создать ЗН
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Удалить запись от ${formatDateTime(appt.scheduledStart)}?`)) {
+                              deleteMutation.mutate(appt.id);
+                            }
+                          }}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          Удалить
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
