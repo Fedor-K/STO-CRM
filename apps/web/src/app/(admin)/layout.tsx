@@ -8,6 +8,7 @@ import { useAuth } from '@/providers/auth-provider';
 
 const navigation = [
   { name: 'Дашборд', href: '/dashboard' },
+  { name: 'Клиенты', href: '/clients' },
   { name: 'Записи', href: '/appointments' },
   { name: 'Заказ-наряды', href: '/work-orders' },
   { name: 'Автомобили', href: '/vehicles' },
