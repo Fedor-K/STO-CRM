@@ -59,12 +59,18 @@ export default function AppointmentsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [showModal, setShowModal] = useState(false);
 
+  const [actionError, setActionError] = useState('');
+
   const createWOMutation = useMutation({
     mutationFn: (appointmentId: string) =>
       apiFetch(`/work-orders/from-appointment/${appointmentId}`, { method: 'POST' }),
     onSuccess: (data: any) => {
+      setActionError('');
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
       router.push(`/work-orders/${data.id}`);
+    },
+    onError: (err: any) => {
+      setActionError(err.message || 'Ошибка создания заказ-наряда');
     },
   });
 
@@ -82,7 +88,13 @@ export default function AppointmentsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiFetch(`/appointments/${id}`, { method: 'DELETE' }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+    onSuccess: () => {
+      setActionError('');
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+    },
+    onError: (err: any) => {
+      setActionError(err.message || 'Ошибка удаления записи');
+    },
   });
 
   return (
@@ -109,6 +121,13 @@ export default function AppointmentsPage() {
           ))}
         </select>
       </div>
+
+      {actionError && (
+        <div className="mt-4 flex items-center justify-between rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError('')} className="ml-4 font-medium text-red-800 hover:text-red-900">✕</button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="mt-8 text-center text-gray-500">Загрузка...</div>
