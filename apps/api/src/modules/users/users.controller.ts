@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { IsString, IsOptional, IsEmail, IsEnum, IsBoolean, MinLength } from 'class-validator';
 import { UsersService } from './users.service';
 import { Roles, CurrentTenant, CurrentUser, type CurrentUserData } from '../../common/decorators';
@@ -69,12 +69,14 @@ export class UsersController {
   @Get()
   @Roles('users:read')
   @ApiOperation({ summary: 'Список пользователей' })
-  findAll(@CurrentTenant() tenantId: string, @Query() query: PaginationDto) {
+  @ApiQuery({ name: 'role', required: false, enum: UserRole })
+  findAll(@CurrentTenant() tenantId: string, @Query() query: PaginationDto & { role?: UserRole }) {
     return this.usersService.findAll(tenantId, {
       page: Number(query.page) || 1,
       limit: Number(query.limit) || 20,
       sort: query.sort ?? 'createdAt',
       order: query.order ?? 'desc',
+      role: query.role,
     });
   }
 

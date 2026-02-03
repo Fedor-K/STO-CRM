@@ -225,7 +225,7 @@ function AppointmentModal({
 
   const { data: clients } = useQuery<{ data: { id: string; firstName: string; lastName: string; email: string }[] }>({
     queryKey: ['clients-for-appt'],
-    queryFn: () => apiFetch('/users?limit=100&sort=firstName&order=asc'),
+    queryFn: () => apiFetch('/users?limit=100&sort=firstName&order=asc&role=CLIENT'),
   });
 
   const { data: vehicles } = useQuery<{ data: { id: string; make: string; model: string; licensePlate: string | null; clientId: string }[] }>({
