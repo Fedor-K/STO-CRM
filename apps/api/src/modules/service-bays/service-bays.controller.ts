@@ -1,17 +1,30 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { IsString, IsOptional, IsBoolean } from 'class-validator';
 import { ServiceBaysService } from './service-bays.service';
 import { Roles, CurrentTenant } from '../../common/decorators';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
 class CreateServiceBayDto {
+  @IsString()
   name!: string;
+
+  @IsOptional()
+  @IsString()
   type?: string;
 }
 
 class UpdateServiceBayDto {
+  @IsOptional()
+  @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsString()
   type?: string;
+
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 
@@ -26,8 +39,8 @@ export class ServiceBaysController {
   @ApiOperation({ summary: 'Список рабочих постов' })
   findAll(@CurrentTenant() tenantId: string, @Query() query: PaginationDto & { isActive?: string }) {
     return this.serviceBaysService.findAll(tenantId, {
-      page: query.page ?? 1,
-      limit: query.limit ?? 50,
+      page: Number(query.page) || 1,
+      limit: Number(query.limit) || 50,
       sort: query.sort ?? 'name',
       order: query.order ?? 'asc',
       isActive: query.isActive === undefined ? undefined : query.isActive === 'true',

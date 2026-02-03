@@ -1,31 +1,82 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { IsString, IsOptional, IsEnum, IsUUID } from 'class-validator';
 import { AppointmentsService } from './appointments.service';
 import { Roles, CurrentTenant } from '../../common/decorators';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { AppointmentStatus } from '@prisma/client';
 
 class CreateAppointmentDto {
+  @IsUUID()
   clientId!: string;
+
+  @IsUUID()
   vehicleId!: string;
+
+  @IsString()
   scheduledStart!: string;
+
+  @IsString()
   scheduledEnd!: string;
+
+  @IsOptional()
+  @IsUUID()
   advisorId?: string;
+
+  @IsOptional()
+  @IsUUID()
   serviceBayId?: string;
+
+  @IsOptional()
+  @IsString()
   source?: string;
+
+  @IsOptional()
+  @IsString()
   adChannel?: string;
+
+  @IsOptional()
+  @IsString()
   notes?: string;
 }
 
 class UpdateAppointmentDto {
+  @IsOptional()
+  @IsString()
   scheduledStart?: string;
+
+  @IsOptional()
+  @IsString()
   scheduledEnd?: string;
+
+  @IsOptional()
+  @IsUUID()
   advisorId?: string;
+
+  @IsOptional()
+  @IsUUID()
   serviceBayId?: string;
+
+  @IsOptional()
+  @IsString()
   source?: string;
+
+  @IsOptional()
+  @IsString()
   adChannel?: string;
+
+  @IsOptional()
+  @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsEnum(AppointmentStatus)
   status?: AppointmentStatus;
+}
+
+class UpdateStatusDto {
+  @IsEnum(AppointmentStatus)
+  status!: AppointmentStatus;
 }
 
 @ApiTags('Записи')
@@ -46,8 +97,8 @@ export class AppointmentsController {
     @Query() query: PaginationDto & { status?: AppointmentStatus; clientId?: string; from?: string; to?: string },
   ) {
     return this.appointmentsService.findAll(tenantId, {
-      page: query.page ?? 1,
-      limit: query.limit ?? 20,
+      page: Number(query.page) || 1,
+      limit: Number(query.limit) || 20,
       sort: query.sort ?? 'scheduledStart',
       order: query.order ?? 'asc',
       status: query.status,
@@ -116,7 +167,7 @@ export class AppointmentsController {
   updateStatus(
     @CurrentTenant() tenantId: string,
     @Param('id') id: string,
-    @Body() dto: { status: AppointmentStatus },
+    @Body() dto: UpdateStatusDto,
   ) {
     return this.appointmentsService.updateStatus(tenantId, id, dto.status);
   }

@@ -1,25 +1,56 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { IsString, IsOptional, IsEmail, IsEnum, IsBoolean, MinLength } from 'class-validator';
 import { UsersService } from './users.service';
 import { Roles, CurrentTenant, CurrentUser, type CurrentUserData } from '../../common/decorators';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { UserRole } from '@prisma/client';
 
 class CreateUserDto {
+  @IsEmail()
   email!: string;
+
+  @IsString()
+  @MinLength(8)
   password!: string;
+
+  @IsEnum(UserRole)
   role!: UserRole;
+
+  @IsString()
   firstName!: string;
+
+  @IsString()
   lastName!: string;
+
+  @IsOptional()
+  @IsString()
   phone?: string;
 }
 
 class UpdateUserDto {
+  @IsOptional()
+  @IsEmail()
   email?: string;
+
+  @IsOptional()
+  @IsEnum(UserRole)
   role?: UserRole;
+
+  @IsOptional()
+  @IsString()
   firstName?: string;
+
+  @IsOptional()
+  @IsString()
   lastName?: string;
+
+  @IsOptional()
+  @IsString()
   phone?: string;
+
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 
@@ -40,8 +71,8 @@ export class UsersController {
   @ApiOperation({ summary: 'Список пользователей' })
   findAll(@CurrentTenant() tenantId: string, @Query() query: PaginationDto) {
     return this.usersService.findAll(tenantId, {
-      page: query.page ?? 1,
-      limit: query.limit ?? 20,
+      page: Number(query.page) || 1,
+      limit: Number(query.limit) || 20,
       sort: query.sort ?? 'createdAt',
       order: query.order ?? 'desc',
     });

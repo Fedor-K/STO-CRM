@@ -1,31 +1,57 @@
 import { Controller, Post, Body, Res, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { IsString, IsOptional, IsEmail, MinLength } from 'class-validator';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { Public } from '../../common/decorators';
 
 class LoginDto {
+  @IsEmail()
   email!: string;
+
+  @IsString()
   password!: string;
+
+  @IsString()
   tenantSlug!: string;
 }
 
 class RegisterDto {
+  @IsEmail()
   email!: string;
+
+  @IsString()
+  @MinLength(6)
   password!: string;
+
+  @IsString()
   firstName!: string;
+
+  @IsString()
   lastName!: string;
+
+  @IsOptional()
+  @IsString()
   phone?: string;
+
+  @IsString()
   tenantSlug!: string;
 }
 
 class ForgotPasswordDto {
+  @IsEmail()
   email!: string;
+
+  @IsString()
   tenantSlug!: string;
 }
 
 class ResetPasswordDto {
+  @IsString()
   token!: string;
+
+  @IsString()
+  @MinLength(6)
   password!: string;
 }
 

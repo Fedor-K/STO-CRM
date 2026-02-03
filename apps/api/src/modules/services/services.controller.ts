@@ -1,28 +1,70 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { IsString, IsOptional, IsNumber, IsEnum, IsBoolean } from 'class-validator';
 import { ServicesService } from './services.service';
 import { Roles, CurrentTenant } from '../../common/decorators';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { ServiceUsage } from '@prisma/client';
 
 class CreateServiceDto {
+  @IsString()
   name!: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
+
+  @IsNumber()
   price!: number;
+
+  @IsOptional()
+  @IsNumber()
   estimatedMinutes?: number;
+
+  @IsOptional()
+  @IsNumber()
   normHours?: number;
+
+  @IsOptional()
+  @IsNumber()
   complexityLevel?: number;
+
+  @IsOptional()
+  @IsEnum(ServiceUsage)
   serviceUsage?: ServiceUsage;
 }
 
 class UpdateServiceDto {
+  @IsOptional()
+  @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsNumber()
   price?: number;
+
+  @IsOptional()
+  @IsNumber()
   estimatedMinutes?: number;
+
+  @IsOptional()
+  @IsNumber()
   normHours?: number;
+
+  @IsOptional()
+  @IsNumber()
   complexityLevel?: number;
+
+  @IsOptional()
+  @IsEnum(ServiceUsage)
   serviceUsage?: ServiceUsage;
+
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 
@@ -43,8 +85,8 @@ export class ServicesController {
     @Query() query: PaginationDto & { search?: string; usage?: ServiceUsage; isActive?: string },
   ) {
     return this.servicesService.findAll(tenantId, {
-      page: query.page ?? 1,
-      limit: query.limit ?? 20,
+      page: Number(query.page) || 1,
+      limit: Number(query.limit) || 20,
       sort: query.sort ?? 'createdAt',
       order: query.order ?? 'desc',
       search: query.search,
