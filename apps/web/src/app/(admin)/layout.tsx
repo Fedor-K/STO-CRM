@@ -13,6 +13,7 @@ const navigation = [
   { name: 'Клиенты', href: '/clients' },
   { name: 'Автомобили', href: '/vehicles' },
   { name: 'Услуги', href: '/services' },
+  { name: 'Посты', href: '/service-bays' },
   { name: 'Склад', href: '/inventory' },
   { name: 'Финансы', href: '/finance' },
   { name: 'Персонал', href: '/staff' },

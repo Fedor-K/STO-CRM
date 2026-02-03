@@ -6,6 +6,10 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
+import { ServicesModule } from './modules/services/services.module';
+import { ServiceBaysModule } from './modules/service-bays/service-bays.module';
+import { VehiclesModule } from './modules/vehicles/vehicles.module';
+import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TenantScopeInterceptor } from './common/interceptors/tenant-scope.interceptor';
@@ -20,6 +24,10 @@ import { TenantScopeInterceptor } from './common/interceptors/tenant-scope.inter
     AuthModule,
     TenantsModule,
     UsersModule,
+    ServicesModule,
+    ServiceBaysModule,
+    VehiclesModule,
+    AppointmentsModule,
   ],
   controllers: [AppController],
   providers: [
