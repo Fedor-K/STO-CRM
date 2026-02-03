@@ -210,7 +210,7 @@ export default function DashboardPage() {
                           <AppointmentFunnelCard key={appt.id} appointment={appt} column={col.key} onCreated={invalidateFunnel} />
                         ))
                       : items.map((wo: WorkOrderCard) => (
-                          <WorkOrderFunnelCard key={wo.id} workOrder={wo} />
+                          <WorkOrderFunnelCard key={wo.id} workOrder={wo} onUpdate={invalidateFunnel} />
                         ))
                     }
                     {items.length === 0 && (
@@ -258,27 +258,33 @@ function AppointmentFunnelCard({
   column: string;
   onCreated: () => void;
 }) {
-  const [creating, setCreating] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  async function handleCreateWO(e: React.MouseEvent) {
+  async function handleAction(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    setCreating(true);
+    setLoading(true);
     try {
-      await apiFetch(`/work-orders/from-appointment/${appointment.id}`, { method: 'POST' });
+      if (column === 'appeal') {
+        await apiFetch(`/appointments/${appointment.id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'CONFIRMED' }),
+        });
+      } else if (column === 'scheduled') {
+        await apiFetch(`/work-orders/from-appointment/${appointment.id}`, { method: 'POST' });
+      }
       onCreated();
-    } catch {
-      alert('Ошибка создания заказ-наряда');
+    } catch (err: any) {
+      alert(err.message || 'Ошибка');
     } finally {
-      setCreating(false);
+      setLoading(false);
     }
   }
 
+  const actionLabel = column === 'appeal' ? 'Подтвердить →' : column === 'scheduled' ? 'Принять авто →' : null;
+
   return (
-    <Link
-      href="/appointments"
-      className="block rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm transition hover:shadow-md"
-    >
+    <div className="rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm">
       <div className="text-sm font-medium text-gray-900">
         {appointment.client.firstName} {appointment.client.lastName}
       </div>
@@ -292,27 +298,58 @@ function AppointmentFunnelCard({
       <div className="mt-0.5 text-[11px] text-gray-400">
         {formatDate(appointment.scheduledStart)}
       </div>
-      {column === 'scheduled' && (
+      {actionLabel && (
         <button
-          onClick={handleCreateWO}
-          disabled={creating}
+          onClick={handleAction}
+          disabled={loading}
           className="mt-1.5 w-full rounded bg-primary-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-primary-700 disabled:opacity-50"
         >
-          {creating ? 'Создание...' : 'Создать ЗН'}
+          {loading ? '...' : actionLabel}
         </button>
       )}
-    </Link>
+    </div>
   );
 }
 
-function WorkOrderFunnelCard({ workOrder }: { workOrder: WorkOrderCard }) {
+const WO_NEXT_STATUS: Record<string, { status: string; label: string }> = {
+  NEW: { status: 'DIAGNOSED', label: 'Диагностика →' },
+  DIAGNOSED: { status: 'APPROVED', label: 'Согласовать →' },
+  APPROVED: { status: 'IN_PROGRESS', label: 'В работу →' },
+  IN_PROGRESS: { status: 'COMPLETED', label: 'Готово →' },
+  PAUSED: { status: 'IN_PROGRESS', label: 'Возобновить →' },
+  COMPLETED: { status: 'INVOICED', label: 'Выставить счёт →' },
+  INVOICED: { status: 'PAID', label: 'Оплачен →' },
+  PAID: { status: 'CLOSED', label: 'Выдать →' },
+};
+
+function WorkOrderFunnelCard({ workOrder, onUpdate }: { workOrder: WorkOrderCard; onUpdate: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const next = WO_NEXT_STATUS[workOrder.status];
+
+  async function handleNext(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!next) return;
+    setLoading(true);
+    try {
+      await apiFetch(`/work-orders/${workOrder.id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: next.status }),
+      });
+      onUpdate();
+    } catch (err: any) {
+      alert(err.message || 'Ошибка');
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
-    <Link
-      href={`/work-orders/${workOrder.id}`}
-      className="block rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm transition hover:shadow-md"
-    >
+    <div className="rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-bold text-primary-600">{workOrder.orderNumber}</span>
+        <Link href={`/work-orders/${workOrder.id}`} className="text-xs font-bold text-primary-600 hover:underline">
+          {workOrder.orderNumber}
+        </Link>
         <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${CARD_BADGE_COLORS[workOrder.status] || 'bg-gray-100'}`}>
           {STATUS_LABELS[workOrder.status]}
         </span>
@@ -340,7 +377,16 @@ function WorkOrderFunnelCard({ workOrder }: { workOrder: WorkOrderCard }) {
           {formatShortDate(workOrder.createdAt)}
         </span>
       </div>
-    </Link>
+      {next && (
+        <button
+          onClick={handleNext}
+          disabled={loading}
+          className="mt-1.5 w-full rounded bg-primary-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+        >
+          {loading ? '...' : next.label}
+        </button>
+      )}
+    </div>
   );
 }
 
