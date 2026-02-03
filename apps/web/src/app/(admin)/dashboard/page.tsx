@@ -128,6 +128,8 @@ function sanitizePlate(val: string): string {
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+  const [selectedAppointment, setSelectedAppointment] = useState<{ id: string; column: string } | null>(null);
+  const [selectedWorkOrder, setSelectedWorkOrder] = useState<string | null>(null);
 
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
@@ -207,10 +209,21 @@ export default function DashboardPage() {
                   <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2" style={{ maxHeight: 'calc(100vh - 340px)' }}>
                     {col.type === 'appointment'
                       ? items.map((appt: AppointmentCard) => (
-                          <AppointmentFunnelCard key={appt.id} appointment={appt} column={col.key} onCreated={invalidateFunnel} />
+                          <AppointmentFunnelCard
+                            key={appt.id}
+                            appointment={appt}
+                            column={col.key}
+                            onCreated={invalidateFunnel}
+                            onClick={() => setSelectedAppointment({ id: appt.id, column: col.key })}
+                          />
                         ))
                       : items.map((wo: WorkOrderCard) => (
-                          <WorkOrderFunnelCard key={wo.id} workOrder={wo} onUpdate={invalidateFunnel} />
+                          <WorkOrderFunnelCard
+                            key={wo.id}
+                            workOrder={wo}
+                            onUpdate={invalidateFunnel}
+                            onClick={() => setSelectedWorkOrder(wo.id)}
+                          />
                         ))
                     }
                     {items.length === 0 && (
@@ -229,6 +242,29 @@ export default function DashboardPage() {
           onClose={() => setShowAppointmentModal(false)}
           onSuccess={() => {
             setShowAppointmentModal(false);
+            invalidateFunnel();
+          }}
+        />
+      )}
+
+      {selectedAppointment && (
+        <AppointmentDetailModal
+          appointmentId={selectedAppointment.id}
+          column={selectedAppointment.column}
+          onClose={() => setSelectedAppointment(null)}
+          onUpdate={() => {
+            setSelectedAppointment(null);
+            invalidateFunnel();
+          }}
+        />
+      )}
+
+      {selectedWorkOrder && (
+        <WorkOrderDetailModal
+          workOrderId={selectedWorkOrder}
+          onClose={() => setSelectedWorkOrder(null)}
+          onUpdate={() => {
+            setSelectedWorkOrder(null);
             invalidateFunnel();
           }}
         />
@@ -253,15 +289,16 @@ function AppointmentFunnelCard({
   appointment,
   column,
   onCreated,
+  onClick,
 }: {
   appointment: AppointmentCard;
   column: string;
   onCreated: () => void;
+  onClick: () => void;
 }) {
   const [loading, setLoading] = useState(false);
 
   async function handleAction(e: React.MouseEvent) {
-    e.preventDefault();
     e.stopPropagation();
     setLoading(true);
     try {
@@ -284,7 +321,10 @@ function AppointmentFunnelCard({
   const actionLabel = column === 'appeal' ? 'Подтвердить →' : column === 'scheduled' ? 'Принять авто →' : null;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm">
+    <div
+      onClick={onClick}
+      className="cursor-pointer rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm transition hover:shadow-md hover:border-primary-300"
+    >
       <div className="text-sm font-medium text-gray-900">
         {appointment.client.firstName} {appointment.client.lastName}
       </div>
@@ -322,7 +362,7 @@ const WO_NEXT_STATUS: Record<string, { status: string; label: string }> = {
   PAID: { status: 'CLOSED', label: 'Выдать →' },
 };
 
-function WorkOrderFunnelCard({ workOrder, onUpdate }: { workOrder: WorkOrderCard; onUpdate: () => void }) {
+function WorkOrderFunnelCard({ workOrder, onUpdate, onClick }: { workOrder: WorkOrderCard; onUpdate: () => void; onClick: () => void }) {
   const [loading, setLoading] = useState(false);
   const next = WO_NEXT_STATUS[workOrder.status];
 
@@ -345,9 +385,9 @@ function WorkOrderFunnelCard({ workOrder, onUpdate }: { workOrder: WorkOrderCard
   }
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm">
+    <div onClick={onClick} className="cursor-pointer rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm transition hover:shadow-md hover:border-primary-300">
       <div className="flex items-center justify-between">
-        <Link href={`/work-orders/${workOrder.id}`} className="text-xs font-bold text-primary-600 hover:underline">
+        <Link href={`/work-orders/${workOrder.id}`} onClick={(e) => e.stopPropagation()} className="text-xs font-bold text-primary-600 hover:underline">
           {workOrder.orderNumber}
         </Link>
         <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${CARD_BADGE_COLORS[workOrder.status] || 'bg-gray-100'}`}>
@@ -831,6 +871,642 @@ function CreateAppointmentModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// --- Appointment Detail Modal ---
+
+interface AppointmentDetail {
+  id: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+  status: string;
+  notes: string | null;
+  source: string | null;
+  adChannel: string | null;
+  client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null };
+  advisor: { id: string; firstName: string; lastName: string } | null;
+  serviceBay: { id: string; name: string; type: string | null } | null;
+}
+
+function AppointmentDetailModal({
+  appointmentId,
+  column,
+  onClose,
+  onUpdate,
+}: {
+  appointmentId: string;
+  column: string;
+  onClose: () => void;
+  onUpdate: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const { data: appointment, isLoading } = useQuery<AppointmentDetail>({
+    queryKey: ['appointment-detail', appointmentId],
+    queryFn: () => apiFetch(`/appointments/${appointmentId}`),
+  });
+
+  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
+    queryKey: ['bays-modal'],
+    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
+  });
+
+  const { data: advisors } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
+    queryKey: ['advisors-modal'],
+    queryFn: () => apiFetch('/users?limit=50&role=RECEPTIONIST'),
+  });
+
+  const [notes, setNotes] = useState('');
+  const [serviceBayId, setServiceBayId] = useState('');
+  const [advisorId, setAdvisorId] = useState('');
+  const [date, setDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [initialized, setInitialized] = useState(false);
+
+  if (appointment && !initialized) {
+    setNotes(appointment.notes || '');
+    setServiceBayId(appointment.serviceBay?.id || '');
+    setAdvisorId(appointment.advisor?.id || '');
+    const start = new Date(appointment.scheduledStart);
+    const end = new Date(appointment.scheduledEnd);
+    setDate(start.toISOString().slice(0, 10));
+    setStartTime(start.toTimeString().slice(0, 5));
+    setEndTime(end.toTimeString().slice(0, 5));
+    setInitialized(true);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`/appointments/${appointmentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          notes: notes || null,
+          serviceBayId: serviceBayId || null,
+          advisorId: advisorId || null,
+          scheduledStart: `${date}T${startTime}:00`,
+          scheduledEnd: `${date}T${endTime}:00`,
+        }),
+      });
+      onUpdate();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка сохранения');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAction() {
+    setSaving(true);
+    setError('');
+    try {
+      if (column === 'appeal') {
+        await apiFetch(`/appointments/${appointmentId}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'CONFIRMED' }),
+        });
+      } else if (column === 'scheduled') {
+        await apiFetch(`/work-orders/from-appointment/${appointmentId}`, { method: 'POST' });
+      }
+      onUpdate();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const actionLabel = column === 'appeal' ? 'Подтвердить запись' : column === 'scheduled' ? 'Принять авто → создать заказ-наряд' : null;
+  const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">
+            {column === 'appeal' ? 'Обращение' : 'Запись'}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        {isLoading ? (
+          <div className="py-8 text-center text-gray-500">Загрузка...</div>
+        ) : appointment ? (
+          <div className="mt-4 space-y-4">
+            {/* Client info (read-only) */}
+            <div className="rounded-lg bg-gray-50 p-3">
+              <p className="text-xs font-medium text-gray-500">Клиент</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {appointment.client.firstName} {appointment.client.lastName}
+              </p>
+              {appointment.client.phone && (
+                <p className="text-xs text-gray-600">{appointment.client.phone}</p>
+              )}
+              {appointment.client.email && (
+                <p className="text-xs text-gray-500">{appointment.client.email}</p>
+              )}
+            </div>
+
+            {/* Vehicle info (read-only) */}
+            <div className="rounded-lg bg-gray-50 p-3">
+              <p className="text-xs font-medium text-gray-500">Автомобиль</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {appointment.vehicle.make} {appointment.vehicle.model}
+                {appointment.vehicle.year ? ` (${appointment.vehicle.year})` : ''}
+              </p>
+              {appointment.vehicle.licensePlate && (
+                <p className="text-xs text-gray-600">{appointment.vehicle.licensePlate}</p>
+              )}
+            </div>
+
+            {/* Date & Time (editable) */}
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600">Дата</label>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600">Начало</label>
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600">Конец</label>
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
+              </div>
+            </div>
+
+            {/* Service Bay */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600">Рабочий пост</label>
+              <select value={serviceBayId} onChange={(e) => setServiceBayId(e.target.value)} className={inputCls}>
+                <option value="">Не выбран</option>
+                {bays?.data?.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Advisor */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600">Приёмщик</label>
+              <select value={advisorId} onChange={(e) => setAdvisorId(e.target.value)} className={inputCls}>
+                <option value="">Не назначен</option>
+                {advisors?.data?.map((a) => (
+                  <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600">Заметки / жалобы</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                placeholder="Причина обращения..."
+                className={inputCls}
+              />
+            </div>
+
+            {error && <p className="text-sm text-red-600">{error}</p>}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {saving ? '...' : 'Сохранить'}
+              </button>
+              {actionLabel && (
+                <button
+                  onClick={handleAction}
+                  disabled={saving}
+                  className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {saving ? '...' : actionLabel}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-red-500">Не удалось загрузить данные</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Work Order Detail Modal ---
+
+interface WorkOrderDetail {
+  id: string;
+  orderNumber: string;
+  status: string;
+  clientComplaints: string | null;
+  diagnosticNotes: string | null;
+  totalLabor: string | number;
+  totalParts: string | number;
+  totalAmount: string | number;
+  createdAt: string;
+  client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null };
+  advisor: { id: string; firstName: string; lastName: string } | null;
+  mechanic: { id: string; firstName: string; lastName: string } | null;
+  serviceBay: { id: string; name: string; type: string | null } | null;
+  items: {
+    id: string;
+    type: string;
+    description: string;
+    quantity: number;
+    unitPrice: string | number;
+    total: string | number;
+    normHours: number | null;
+  }[];
+  workLogs: {
+    id: string;
+    description: string;
+    hoursWorked: number;
+    logDate: string;
+    mechanic: { id: string; firstName: string; lastName: string } | null;
+  }[];
+}
+
+function WorkOrderDetailModal({
+  workOrderId,
+  onClose,
+  onUpdate,
+}: {
+  workOrderId: string;
+  onClose: () => void;
+  onUpdate: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const { data: wo, isLoading } = useQuery<WorkOrderDetail>({
+    queryKey: ['work-order-detail', workOrderId],
+    queryFn: () => apiFetch(`/work-orders/${workOrderId}`),
+  });
+
+  const { data: mechanics } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
+    queryKey: ['mechanics-modal'],
+    queryFn: () => apiFetch('/users?limit=50&role=MECHANIC'),
+  });
+
+  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
+    queryKey: ['bays-modal'],
+    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
+  });
+
+  const [complaints, setComplaints] = useState('');
+  const [diagNotes, setDiagNotes] = useState('');
+  const [mechanicId, setMechanicId] = useState('');
+  const [serviceBayId, setServiceBayId] = useState('');
+  const [initialized, setInitialized] = useState(false);
+
+  // New item form
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [itemType, setItemType] = useState<'SERVICE' | 'PART'>('SERVICE');
+  const [itemDesc, setItemDesc] = useState('');
+  const [itemQty, setItemQty] = useState('1');
+  const [itemPrice, setItemPrice] = useState('');
+
+  if (wo && !initialized) {
+    setComplaints(wo.clientComplaints || '');
+    setDiagNotes(wo.diagnosticNotes || '');
+    setMechanicId(wo.mechanic?.id || '');
+    setServiceBayId(wo.serviceBay?.id || '');
+    setInitialized(true);
+  }
+
+  const next = wo ? WO_NEXT_STATUS[wo.status] : null;
+  const isEditable = wo && !['CLOSED', 'CANCELLED'].includes(wo.status);
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`/work-orders/${workOrderId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          clientComplaints: complaints || null,
+          diagnosticNotes: diagNotes || null,
+          mechanicId: mechanicId || null,
+          serviceBayId: serviceBayId || null,
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+      onUpdate();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка сохранения');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleNextStatus() {
+    if (!next) return;
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: next.status }),
+      });
+      onUpdate();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAddItem() {
+    if (!itemDesc || !itemPrice) return;
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items`, {
+        method: 'POST',
+        body: JSON.stringify({
+          type: itemType,
+          description: itemDesc,
+          quantity: Number(itemQty) || 1,
+          unitPrice: Number(itemPrice),
+        }),
+      });
+      setItemDesc('');
+      setItemQty('1');
+      setItemPrice('');
+      setShowAddItem(false);
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка добавления');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteItem(itemId: string) {
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items/${itemId}`, { method: 'DELETE' });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка удаления');
+    }
+  }
+
+  const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold text-gray-900">{wo?.orderNumber || '...'}</h2>
+            {wo && (
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CARD_BADGE_COLORS[wo.status] || 'bg-gray-100'}`}>
+                {STATUS_LABELS[wo.status]}
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        {isLoading ? (
+          <div className="py-8 text-center text-gray-500">Загрузка...</div>
+        ) : wo ? (
+          <div className="mt-4 space-y-4">
+            {/* Client + Vehicle (read-only) */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs font-medium text-gray-500">Клиент</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  {wo.client.firstName} {wo.client.lastName}
+                </p>
+                {wo.client.phone && <p className="text-xs text-gray-600">{wo.client.phone}</p>}
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs font-medium text-gray-500">Автомобиль</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  {wo.vehicle.make} {wo.vehicle.model}
+                  {wo.vehicle.year ? ` (${wo.vehicle.year})` : ''}
+                </p>
+                {wo.vehicle.licensePlate && <p className="text-xs text-gray-600">{wo.vehicle.licensePlate}</p>}
+                {wo.vehicle.vin && <p className="text-xs text-gray-400 font-mono">{wo.vehicle.vin}</p>}
+              </div>
+            </div>
+
+            {/* Editable fields */}
+            {isEditable && (
+              <>
+                {/* Complaints - relevant for NEW (intake) */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">Жалобы клиента</label>
+                  <textarea
+                    value={complaints}
+                    onChange={(e) => setComplaints(e.target.value)}
+                    rows={2}
+                    placeholder="Что беспокоит клиента..."
+                    className={inputCls}
+                  />
+                </div>
+
+                {/* Diagnostic notes - relevant for DIAGNOSED+ */}
+                {['DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED', 'COMPLETED'].includes(wo.status) && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Заметки диагностики</label>
+                    <textarea
+                      value={diagNotes}
+                      onChange={(e) => setDiagNotes(e.target.value)}
+                      rows={2}
+                      placeholder="Результаты диагностики..."
+                      className={inputCls}
+                    />
+                  </div>
+                )}
+
+                {/* Mechanic + Bay */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Механик</label>
+                    <select value={mechanicId} onChange={(e) => setMechanicId(e.target.value)} className={inputCls}>
+                      <option value="">Не назначен</option>
+                      {mechanics?.data?.map((m) => (
+                        <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Рабочий пост</label>
+                    <select value={serviceBayId} onChange={(e) => setServiceBayId(e.target.value)} className={inputCls}>
+                      <option value="">Не выбран</option>
+                      {bays?.data?.map((b) => (
+                        <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Items (services + parts) */}
+            <div>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-gray-600">Работы и запчасти</p>
+                {isEditable && (
+                  <button
+                    onClick={() => setShowAddItem(!showAddItem)}
+                    className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                  >
+                    {showAddItem ? 'Отмена' : '+ Добавить'}
+                  </button>
+                )}
+              </div>
+
+              {showAddItem && (
+                <div className="mt-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select value={itemType} onChange={(e) => setItemType(e.target.value as 'SERVICE' | 'PART')} className={inputCls}>
+                      <option value="SERVICE">Работа</option>
+                      <option value="PART">Запчасть</option>
+                    </select>
+                    <input
+                      placeholder="Кол-во"
+                      type="number"
+                      min={1}
+                      value={itemQty}
+                      onChange={(e) => setItemQty(e.target.value)}
+                      className={inputCls}
+                    />
+                  </div>
+                  <input
+                    placeholder="Описание *"
+                    value={itemDesc}
+                    onChange={(e) => setItemDesc(e.target.value)}
+                    className={inputCls}
+                  />
+                  <input
+                    placeholder="Цена за ед. *"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={itemPrice}
+                    onChange={(e) => setItemPrice(e.target.value)}
+                    className={inputCls}
+                  />
+                  <button
+                    onClick={handleAddItem}
+                    disabled={saving || !itemDesc || !itemPrice}
+                    className="w-full rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    Добавить
+                  </button>
+                </div>
+              )}
+
+              {wo.items.length > 0 ? (
+                <div className="mt-2 space-y-1">
+                  {wo.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-xs">
+                      <div className="flex-1">
+                        <span className={`mr-1.5 rounded px-1 py-0.5 text-[10px] font-medium ${item.type === 'SERVICE' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {item.type === 'SERVICE' ? 'Работа' : 'Запчасть'}
+                        </span>
+                        <span className="text-gray-700">{item.description}</span>
+                        <span className="ml-1 text-gray-400">
+                          {item.quantity} x {formatMoney(item.unitPrice)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-700">{formatMoney(item.total)}</span>
+                        {isEditable && (
+                          <button
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="text-red-400 hover:text-red-600"
+                            title="Удалить"
+                          >
+                            &times;
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-gray-400">Нет позиций</p>
+              )}
+            </div>
+
+            {/* Totals */}
+            <div className="flex justify-end gap-4 rounded-lg bg-gray-50 px-4 py-2">
+              <div className="text-xs text-gray-500">
+                Работы: <span className="font-semibold text-gray-700">{formatMoney(wo.totalLabor)}</span>
+              </div>
+              <div className="text-xs text-gray-500">
+                Запчасти: <span className="font-semibold text-gray-700">{formatMoney(wo.totalParts)}</span>
+              </div>
+              <div className="text-sm font-bold text-gray-900">
+                Итого: {formatMoney(wo.totalAmount)}
+              </div>
+            </div>
+
+            {/* Work logs */}
+            {wo.workLogs.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-gray-600">Журнал работ</p>
+                <div className="mt-1 space-y-1">
+                  {wo.workLogs.map((log) => (
+                    <div key={log.id} className="rounded bg-gray-50 px-3 py-1.5 text-xs text-gray-600">
+                      <span className="font-medium text-gray-700">{formatShortDate(log.logDate)}</span>
+                      {' — '}
+                      {log.description}
+                      {log.mechanic && (
+                        <span className="ml-1 text-gray-400">({log.mechanic.firstName} {log.mechanic.lastName})</span>
+                      )}
+                      <span className="ml-1 text-gray-400">{log.hoursWorked}ч</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {error && <p className="text-sm text-red-600">{error}</p>}
+
+            <div className="flex gap-2 pt-2">
+              {isEditable && (
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {saving ? '...' : 'Сохранить'}
+                </button>
+              )}
+              {next && (
+                <button
+                  onClick={handleNextStatus}
+                  disabled={saving}
+                  className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {saving ? '...' : next.label}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-red-500">Не удалось загрузить данные</div>
+        )}
       </div>
     </div>
   );
