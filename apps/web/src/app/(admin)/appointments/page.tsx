@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { useRouter } from 'next/navigation';
@@ -296,6 +296,23 @@ function AppointmentModal({
     queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
   });
 
+  const { data: baySchedule } = useQuery<{ data: { id: string; scheduledStart: string; scheduledEnd: string; client: { firstName: string; lastName: string }; vehicle: { make: string; model: string } }[] }>({
+    queryKey: ['bay-schedule', serviceBayId, date],
+    queryFn: () => apiFetch(`/appointments?limit=50&sort=scheduledStart&order=asc&from=${date}T00:00:00&to=${date}T23:59:59&serviceBayId=${serviceBayId}`),
+    enabled: !!serviceBayId && !!date,
+  });
+
+  const hasConflict = useMemo(() => {
+    if (!serviceBayId || !date || !startTime || !endTime || !baySchedule?.data?.length) return false;
+    const reqStart = new Date(`${date}T${startTime}:00`);
+    const reqEnd = new Date(`${date}T${endTime}:00`);
+    return baySchedule.data.some((appt) => {
+      const s = new Date(appt.scheduledStart);
+      const e = new Date(appt.scheduledEnd);
+      return s < reqEnd && e > reqStart;
+    });
+  }, [serviceBayId, date, startTime, endTime, baySchedule]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -411,6 +428,15 @@ function AppointmentModal({
                 <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
               ))}
             </select>
+            {hasConflict && (
+              <p className="mt-1 text-xs font-bold text-red-600">Пост занят в выбранное время!</p>
+            )}
+            {serviceBayId && date && baySchedule?.data && baySchedule.data.length > 0 && !hasConflict && (
+              <p className="mt-1 text-xs text-amber-600">На этот день есть записи (без пересечений)</p>
+            )}
+            {serviceBayId && date && baySchedule?.data && baySchedule.data.length === 0 && (
+              <p className="mt-1 text-xs text-green-600">Пост свободен</p>
+            )}
           </div>
 
           <div>
@@ -453,10 +479,10 @@ function AppointmentModal({
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || hasConflict}
               className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
             >
-              {saving ? 'Сохранение...' : 'Записать'}
+              {saving ? 'Сохранение...' : hasConflict ? 'Пост занят' : 'Записать'}
             </button>
           </div>
         </form>

@@ -14,6 +14,46 @@ const appointmentInclude = {
 export class AppointmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Проверка конфликтов: на одном посту не может быть двух активных записей одновременно.
+   */
+  private async checkServiceBayConflict(
+    tenantId: string,
+    serviceBayId: string,
+    start: Date,
+    end: Date,
+    excludeId?: string,
+  ): Promise<void> {
+    const where: any = {
+      tenantId,
+      serviceBayId,
+      status: { notIn: ['CANCELLED', 'COMPLETED', 'NO_SHOW'] },
+      scheduledStart: { lt: end },
+      scheduledEnd: { gt: start },
+    };
+    if (excludeId) {
+      where.id = { not: excludeId };
+    }
+
+    const conflict = await this.prisma.appointment.findFirst({
+      where,
+      select: {
+        id: true,
+        scheduledStart: true,
+        scheduledEnd: true,
+        client: { select: { firstName: true, lastName: true } },
+      },
+    });
+
+    if (conflict) {
+      const conflictStart = conflict.scheduledStart.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      const conflictEnd = conflict.scheduledEnd.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      throw new BadRequestException(
+        `Пост занят: ${conflictStart}–${conflictEnd}, ${conflict.client.firstName} ${conflict.client.lastName}`,
+      );
+    }
+  }
+
   async findAll(
     tenantId: string,
     params: {
@@ -85,21 +125,8 @@ export class AppointmentsService {
       throw new BadRequestException('Время окончания должно быть позже начала');
     }
 
-    // Check service bay availability if specified
     if (data.serviceBayId) {
-      const conflict = await this.prisma.appointment.findFirst({
-        where: {
-          tenantId,
-          serviceBayId: data.serviceBayId,
-          status: { notIn: ['CANCELLED', 'COMPLETED', 'NO_SHOW'] },
-          OR: [
-            { scheduledStart: { lt: end }, scheduledEnd: { gt: start } },
-          ],
-        },
-      });
-      if (conflict) {
-        throw new BadRequestException('Выбранный пост занят в это время');
-      }
+      await this.checkServiceBayConflict(tenantId, data.serviceBayId, start, end);
     }
 
     return this.prisma.appointment.create({
@@ -146,11 +173,20 @@ export class AppointmentsService {
       status?: AppointmentStatus;
     },
   ): Promise<any> {
-    await this.findById(tenantId, id);
+    const existing = await this.findById(tenantId, id);
 
     const updateData: any = { ...data };
     if (data.scheduledStart) updateData.scheduledStart = new Date(data.scheduledStart);
     if (data.scheduledEnd) updateData.scheduledEnd = new Date(data.scheduledEnd);
+
+    // Проверка конфликтов если меняется время или пост
+    const serviceBayId = data.serviceBayId ?? existing.serviceBay?.id;
+    const start = updateData.scheduledStart ?? existing.scheduledStart;
+    const end = updateData.scheduledEnd ?? existing.scheduledEnd;
+
+    if (serviceBayId && (data.scheduledStart || data.scheduledEnd || data.serviceBayId)) {
+      await this.checkServiceBayConflict(tenantId, serviceBayId, new Date(start), new Date(end), id);
+    }
 
     return this.prisma.appointment.update({
       where: { id },

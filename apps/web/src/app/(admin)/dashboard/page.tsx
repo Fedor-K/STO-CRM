@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import Link from 'next/link';
@@ -406,6 +406,18 @@ function CreateAppointmentModal({
     enabled: !!serviceBayId && !!date,
   });
 
+  // Проверка конфликта времени на выбранном посту
+  const hasConflict = useMemo(() => {
+    if (!serviceBayId || !date || !startTime || !endTime || !baySchedule?.data?.length) return false;
+    const reqStart = new Date(`${date}T${startTime}:00`);
+    const reqEnd = new Date(`${date}T${endTime}:00`);
+    return baySchedule.data.some((appt) => {
+      const s = new Date(appt.scheduledStart);
+      const e = new Date(appt.scheduledEnd);
+      return s < reqEnd && e > reqStart;
+    });
+  }, [serviceBayId, date, startTime, endTime, baySchedule]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -685,24 +697,42 @@ function CreateAppointmentModal({
                 <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
               ))}
             </select>
-            {serviceBayId && date && baySchedule?.data && baySchedule.data.length > 0 && (
-              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
-                <p className="text-xs font-medium text-amber-700">Занято на {new Date(date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}:</p>
-                <ul className="mt-1 space-y-0.5">
-                  {baySchedule.data.map((appt) => (
-                    <li key={appt.id} className="text-xs text-amber-600">
-                      {new Date(appt.scheduledStart).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                      {' – '}
-                      {new Date(appt.scheduledEnd).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                      {' · '}
-                      {appt.client.firstName} {appt.client.lastName}
-                      {' · '}
-                      {appt.vehicle.make} {appt.vehicle.model}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {serviceBayId && date && baySchedule?.data && baySchedule.data.length > 0 && (() => {
+              const reqStart = new Date(`${date}T${startTime}:00`);
+              const reqEnd = new Date(`${date}T${endTime}:00`);
+              const conflicting = baySchedule.data.filter((appt) => {
+                const s = new Date(appt.scheduledStart);
+                const e = new Date(appt.scheduledEnd);
+                return s < reqEnd && e > reqStart;
+              });
+              return (
+                <div className={`mt-2 rounded-lg border p-2 ${conflicting.length > 0 ? 'border-red-300 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
+                  {conflicting.length > 0 && (
+                    <p className="text-xs font-bold text-red-700">Конфликт! Пост занят в выбранное время:</p>
+                  )}
+                  {conflicting.length === 0 && (
+                    <p className="text-xs font-medium text-amber-700">Занято на {new Date(date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })} (без пересечений):</p>
+                  )}
+                  <ul className="mt-1 space-y-0.5">
+                    {baySchedule.data.map((appt) => {
+                      const isConflict = conflicting.some((c) => c.id === appt.id);
+                      return (
+                        <li key={appt.id} className={`text-xs ${isConflict ? 'font-bold text-red-700' : 'text-amber-600'}`}>
+                          {new Date(appt.scheduledStart).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                          {' – '}
+                          {new Date(appt.scheduledEnd).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                          {' · '}
+                          {appt.client.firstName} {appt.client.lastName}
+                          {' · '}
+                          {appt.vehicle.make} {appt.vehicle.model}
+                          {isConflict && ' ⛔'}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })()}
             {serviceBayId && date && baySchedule?.data && baySchedule.data.length === 0 && (
               <p className="mt-1 text-xs text-green-600">Пост свободен весь день</p>
             )}
@@ -746,10 +776,11 @@ function CreateAppointmentModal({
             </button>
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || hasConflict}
               className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+              title={hasConflict ? 'Пост занят в выбранное время' : undefined}
             >
-              {saving ? 'Сохранение...' : 'Записать'}
+              {saving ? 'Сохранение...' : hasConflict ? 'Пост занят' : 'Записать'}
             </button>
           </div>
         </form>
