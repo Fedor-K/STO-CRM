@@ -1,0 +1,70 @@
+export const ru = {
+  roles: {
+    SUPERADMIN: 'Суперадмин',
+    OWNER: 'Владелец',
+    MANAGER: 'Менеджер',
+    RECEPTIONIST: 'Мастер-приёмщик',
+    MECHANIC: 'Механик',
+    CLIENT: 'Клиент',
+  },
+
+  appointmentStatus: {
+    PENDING: 'Ожидает подтверждения',
+    CONFIRMED: 'Подтверждена',
+    IN_PROGRESS: 'В процессе',
+    COMPLETED: 'Завершена',
+    CANCELLED: 'Отменена',
+    NO_SHOW: 'Не явился',
+  },
+
+  workOrderStatus: {
+    NEW: 'Новый',
+    DIAGNOSED: 'Диагностика завершена',
+    APPROVED: 'Согласован',
+    IN_PROGRESS: 'В работе',
+    PAUSED: 'Приостановлен',
+    COMPLETED: 'Работы завершены',
+    INVOICED: 'Выставлен счёт',
+    PAID: 'Оплачен',
+    CLOSED: 'Закрыт',
+    CANCELLED: 'Отменён',
+  },
+
+  errors: {
+    unauthorized: 'Необходима авторизация',
+    forbidden: 'Недостаточно прав для выполнения операции',
+    notFound: 'Запись не найдена',
+    conflict: 'Запись с такими данными уже существует',
+    validation: 'Ошибка валидации',
+    invalidCredentials: 'Неверный email или пароль',
+    tokenExpired: 'Срок действия токена истёк',
+    emailTaken: 'Пользователь с таким email уже зарегистрирован',
+    tenantNotFound: 'Автосервис не найден',
+    workOrderTransitionInvalid: 'Невозможен переход из статуса «{from}» в «{to}»',
+    priceChangeExceeded: 'Изменение стоимости превышает 5%. Требуется повторное согласование клиента.',
+  },
+
+  followUpResult: {
+    DONE: 'Выполнено',
+    RESCHED: 'Перенесено',
+    DECLINE: 'Отказ',
+    NO_ANSWER: 'Нет ответа',
+  },
+
+  common: {
+    save: 'Сохранить',
+    cancel: 'Отмена',
+    delete: 'Удалить',
+    edit: 'Редактировать',
+    create: 'Создать',
+    search: 'Поиск',
+    filter: 'Фильтр',
+    loading: 'Загрузка...',
+    noData: 'Нет данных',
+    confirm: 'Подтвердить',
+    back: 'Назад',
+    next: 'Далее',
+    total: 'Итого',
+    actions: 'Действия',
+  },
+} as const;

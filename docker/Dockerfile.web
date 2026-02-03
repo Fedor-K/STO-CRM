@@ -1,0 +1,38 @@
+FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@10.13.1 --activate
+WORKDIR /app
+
+# Dependencies
+FROM base AS deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/web/package.json ./apps/web/
+COPY packages/shared/package.json ./packages/shared/
+RUN pnpm install --frozen-lockfile
+
+# Build
+FROM deps AS build
+COPY packages/shared ./packages/shared
+COPY apps/web ./apps/web
+COPY tsconfig.base.json ./
+
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN pnpm --filter @sto-crm/web build
+
+# Production
+FROM node:22-alpine AS production
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=build /app/apps/web/public ./public
+COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
+COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/static ./.next/static
+
+USER nextjs
+EXPOSE 3000
+
+CMD ["node", "server.js"]
