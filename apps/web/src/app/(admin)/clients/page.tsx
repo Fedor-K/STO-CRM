@@ -205,7 +205,6 @@ function ClientModal({
   const [lastName, setLastName] = useState(client?.lastName || '');
   const [email, setEmail] = useState(client?.email || '');
   const [phone, setPhone] = useState(client?.phone || '');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -227,33 +226,17 @@ function ClientModal({
         });
       } else {
         const finalEmail = email || `${phone.replace(/\D/g, '')}@client.local`;
-        if (!password || password.length < 8) {
-          // Auto-generate password for clients
-          const autoPass = crypto.randomUUID().slice(0, 12);
-          await apiFetch('/users', {
-            method: 'POST',
-            body: JSON.stringify({
-              firstName,
-              lastName,
-              email: finalEmail,
-              password: autoPass,
-              phone: phone || undefined,
-              role: 'CLIENT',
-            }),
-          });
-        } else {
-          await apiFetch('/users', {
-            method: 'POST',
-            body: JSON.stringify({
-              firstName,
-              lastName,
-              email: finalEmail,
-              password,
-              phone: phone || undefined,
-              role: 'CLIENT',
-            }),
-          });
-        }
+        await apiFetch('/users', {
+          method: 'POST',
+          body: JSON.stringify({
+            firstName,
+            lastName,
+            email: finalEmail,
+            password: crypto.randomUUID().slice(0, 12),
+            phone: phone || undefined,
+            role: 'CLIENT',
+          }),
+        });
       }
       onSuccess();
     } catch (err: any) {
@@ -321,19 +304,6 @@ function ClientModal({
               required={isEdit}
             />
           </div>
-
-          {!isEdit && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Пароль (необязательно)</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Если не указан — сгенерируется автоматически"
-                className={inputCls}
-              />
-            </div>
-          )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
