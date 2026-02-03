@@ -105,10 +105,29 @@ function formatShortDate(dateStr: string): string {
   return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 }
 
+const CYR_TO_LAT: Record<string, string> = {
+  'А':'A','В':'B','Е':'E','К':'K','М':'M','Н':'H','О':'O','Р':'P','С':'C','Т':'T','У':'Y','Х':'X',
+  'а':'a','в':'b','е':'e','к':'k','м':'m','н':'h','о':'o','р':'p','с':'c','т':'t','у':'y','х':'x',
+};
+
+/** Марка/модель: латиница, цифры, пробел, дефис. Первая буква каждого слова — заглавная. */
+function sanitizeMakeModel(val: string): string {
+  const latin = val.split('').map(ch => CYR_TO_LAT[ch] || ch).join('');
+  const cleaned = latin.replace(/[^a-zA-Z0-9\s\-]/g, '');
+  return cleaned.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+
+/** Госномер: латиница + цифры, всё в верхнем регистре. */
+function sanitizePlate(val: string): string {
+  const latin = val.split('').map(ch => CYR_TO_LAT[ch] || ch).join('');
+  return latin.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
 // --- Page ---
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
+  const [showAppointmentModal, setShowAppointmentModal] = useState(false);
 
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ['dashboard-stats'],
@@ -157,7 +176,15 @@ export default function DashboardPage() {
 
       {/* Funnel */}
       <div className="mt-8">
-        <h2 className="text-lg font-semibold text-gray-900">Воронка клиентов</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Воронка клиентов</h2>
+          <button
+            onClick={() => setShowAppointmentModal(true)}
+            className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+          >
+            + Новая заявка
+          </button>
+        </div>
 
         {funnelLoading ? (
           <div className="mt-4 text-center text-gray-500">Загрузка...</div>
@@ -195,6 +222,16 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {showAppointmentModal && (
+        <CreateAppointmentModal
+          onClose={() => setShowAppointmentModal(false)}
+          onSuccess={() => {
+            setShowAppointmentModal(false);
+            invalidateFunnel();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -303,5 +340,352 @@ function WorkOrderFunnelCard({ workOrder }: { workOrder: WorkOrderCard }) {
         </span>
       </div>
     </Link>
+  );
+}
+
+function CreateAppointmentModal({
+  onClose,
+  onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const queryClient = useQueryClient();
+
+  // Client mode: 'existing' or 'new'
+  const [isNewClient, setIsNewClient] = useState(false);
+  const [clientId, setClientId] = useState('');
+  // New client fields
+  const [newFirstName, setNewFirstName] = useState('');
+  const [newLastName, setNewLastName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+
+  // Vehicle mode: 'existing' or 'new'
+  const [isNewVehicle, setIsNewVehicle] = useState(false);
+  const [vehicleId, setVehicleId] = useState('');
+  // New vehicle fields
+  const [newMake, setNewMake] = useState('');
+  const [newModel, setNewModel] = useState('');
+  const [newLicensePlate, setNewLicensePlate] = useState('');
+
+  // Appointment fields
+  const [date, setDate] = useState('');
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('10:00');
+  const [serviceBayId, setServiceBayId] = useState('');
+  const [notes, setNotes] = useState('');
+  const [source, setSource] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const { data: clients, refetch: refetchClients } = useQuery<{ data: { id: string; firstName: string; lastName: string; email: string }[] }>({
+    queryKey: ['clients-for-appt'],
+    queryFn: () => apiFetch('/users?limit=100&sort=firstName&order=asc&role=CLIENT'),
+  });
+
+  const { data: vehicles, refetch: refetchVehicles } = useQuery<{ data: { id: string; make: string; model: string; licensePlate: string | null; clientId: string }[] }>({
+    queryKey: ['vehicles-for-appt', clientId],
+    queryFn: () => apiFetch(`/vehicles?limit=50${clientId ? `&clientId=${clientId}` : ''}`),
+    enabled: !!clientId && !isNewClient,
+  });
+
+  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
+    queryKey: ['bays-for-appt'],
+    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
+  });
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setSaving(true);
+
+    try {
+      let finalClientId = clientId;
+      let finalVehicleId = vehicleId;
+
+      // 1. Create new client if needed
+      if (isNewClient) {
+        if (!newFirstName || !newLastName || !newPhone) {
+          setError('Заполните ФИО и телефон нового клиента');
+          setSaving(false);
+          return;
+        }
+        const email = newEmail || `${newPhone.replace(/\D/g, '')}@client.local`;
+        const created: any = await apiFetch('/users', {
+          method: 'POST',
+          body: JSON.stringify({
+            firstName: newFirstName,
+            lastName: newLastName,
+            phone: newPhone,
+            email,
+            password: crypto.randomUUID().slice(0, 12),
+            role: 'CLIENT',
+          }),
+        });
+        finalClientId = created.id;
+        refetchClients();
+      }
+
+      if (!finalClientId) {
+        setError('Выберите или создайте клиента');
+        setSaving(false);
+        return;
+      }
+
+      // 2. Create new vehicle if needed
+      if (isNewVehicle || isNewClient) {
+        if (!newMake || !newModel) {
+          setError('Укажите марку и модель автомобиля');
+          setSaving(false);
+          return;
+        }
+        const createdVehicle: any = await apiFetch('/vehicles', {
+          method: 'POST',
+          body: JSON.stringify({
+            make: newMake,
+            model: newModel,
+            licensePlate: newLicensePlate || undefined,
+            clientId: finalClientId,
+          }),
+        });
+        finalVehicleId = createdVehicle.id;
+      }
+
+      if (!finalVehicleId) {
+        setError('Выберите или добавьте автомобиль');
+        setSaving(false);
+        return;
+      }
+
+      if (!date) {
+        setError('Укажите дату');
+        setSaving(false);
+        return;
+      }
+
+      // 3. Create appointment
+      await apiFetch('/appointments', {
+        method: 'POST',
+        body: JSON.stringify({
+          clientId: finalClientId,
+          vehicleId: finalVehicleId,
+          scheduledStart: `${date}T${startTime}:00`,
+          scheduledEnd: `${date}T${endTime}:00`,
+          serviceBayId: serviceBayId || undefined,
+          notes: notes || undefined,
+          source: source || undefined,
+        }),
+      });
+      onSuccess();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка создания записи');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-gray-900">Новая заявка</h2>
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          {/* --- Client --- */}
+          <div>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-gray-700">Клиент *</label>
+              <button
+                type="button"
+                onClick={() => { setIsNewClient(!isNewClient); setClientId(''); setVehicleId(''); setIsNewVehicle(false); }}
+                className="text-xs font-medium text-primary-600 hover:text-primary-700"
+              >
+                {isNewClient ? 'Выбрать существующего' : '+ Новый клиент'}
+              </button>
+            </div>
+
+            {isNewClient ? (
+              <div className="mt-2 space-y-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    placeholder="Имя *"
+                    value={newFirstName}
+                    onChange={(e) => setNewFirstName(e.target.value)}
+                    className={inputCls}
+                    required
+                  />
+                  <input
+                    placeholder="Фамилия *"
+                    value={newLastName}
+                    onChange={(e) => setNewLastName(e.target.value)}
+                    className={inputCls}
+                    required
+                  />
+                </div>
+                <input
+                  placeholder="Телефон *"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  className={inputCls}
+                  required
+                />
+                <input
+                  placeholder="Email (необязательно)"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+            ) : (
+              <select
+                value={clientId}
+                onChange={(e) => { setClientId(e.target.value); setVehicleId(''); setIsNewVehicle(false); }}
+                className={inputCls}
+                required
+              >
+                <option value="">Выберите клиента</option>
+                {clients?.data?.map((c) => (
+                  <option key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.email})</option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* --- Vehicle --- */}
+          {(isNewClient || clientId) && (
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-gray-700">Автомобиль *</label>
+                {!isNewClient && (
+                  <button
+                    type="button"
+                    onClick={() => { setIsNewVehicle(!isNewVehicle); setVehicleId(''); }}
+                    className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                  >
+                    {isNewVehicle ? 'Выбрать существующий' : '+ Новый автомобиль'}
+                  </button>
+                )}
+              </div>
+
+              {isNewClient || isNewVehicle ? (
+                <div className="mt-2 space-y-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+                  <p className="text-[11px] text-gray-400">Только латиница. Кириллица конвертируется автоматически.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      placeholder="Марка * (Toyota, BMW)"
+                      value={newMake}
+                      onChange={(e) => setNewMake(sanitizeMakeModel(e.target.value))}
+                      className={inputCls}
+                      required
+                    />
+                    <input
+                      placeholder="Модель * (Camry, X5)"
+                      value={newModel}
+                      onChange={(e) => setNewModel(sanitizeMakeModel(e.target.value))}
+                      className={inputCls}
+                      required
+                    />
+                  </div>
+                  <input
+                    placeholder="Госномер (A123BC77)"
+                    value={newLicensePlate}
+                    onChange={(e) => setNewLicensePlate(sanitizePlate(e.target.value))}
+                    className={inputCls}
+                  />
+                </div>
+              ) : (
+                <select
+                  value={vehicleId}
+                  onChange={(e) => setVehicleId(e.target.value)}
+                  className={inputCls}
+                  required
+                >
+                  <option value="">Выберите автомобиль</option>
+                  {vehicles?.data?.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.make} {v.model} {v.licensePlate ? `(${v.licensePlate})` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {/* --- Date & Time --- */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Дата *</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Начало *</label>
+              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Конец *</label>
+              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} required />
+            </div>
+          </div>
+
+          {/* --- Service Bay --- */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Рабочий пост</label>
+            <select value={serviceBayId} onChange={(e) => setServiceBayId(e.target.value)} className={inputCls}>
+              <option value="">Не выбран</option>
+              {bays?.data?.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* --- Source --- */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Источник обращения</label>
+            <select value={source} onChange={(e) => setSource(e.target.value)} className={inputCls}>
+              <option value="">Не указан</option>
+              <option value="phone">Телефон</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="website">Сайт</option>
+              <option value="walk-in">Самозаход</option>
+              <option value="referral">Рекомендация</option>
+              <option value="repeat">Повторный визит</option>
+            </select>
+          </div>
+
+          {/* --- Notes --- */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Заметки</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              placeholder="Причина обращения, жалобы клиента..."
+              className={inputCls}
+            />
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+            >
+              {saving ? 'Сохранение...' : 'Записать'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
