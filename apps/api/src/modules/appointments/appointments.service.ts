@@ -261,8 +261,8 @@ export class AppointmentsService {
     return this.prisma.appointment.findMany({
       where: {
         tenantId,
-        scheduledStart: { gte: new Date(params.from) },
-        scheduledEnd: { lte: new Date(params.to) },
+        scheduledStart: { lt: new Date(params.to) },
+        scheduledEnd: { gt: new Date(params.from) },
       },
       include: appointmentInclude,
       orderBy: { scheduledStart: 'asc' },

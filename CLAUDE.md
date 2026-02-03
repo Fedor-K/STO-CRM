@@ -21,6 +21,28 @@ packages/ui/       — общие UI-компоненты
 docker/            — Dockerfile'ы и docker-compose
 ```
 
+## Страницы фронтенда (admin)
+
+| Маршрут | Файл | Описание |
+|---------|------|----------|
+| `/dashboard` | `app/(admin)/dashboard/page.tsx` | Дашборд с воронкой и статистикой |
+| `/clients` | `app/(admin)/clients/page.tsx` | Клиенты — карточки с профилем |
+| `/calendar` | `app/(admin)/calendar/page.tsx` | Недельный календарь записей (06:00–20:00) |
+| `/work-orders` | `app/(admin)/work-orders/page.tsx` | Заказ-наряды |
+| `/vehicles` | `app/(admin)/vehicles/page.tsx` | Автомобили |
+| `/services` | `app/(admin)/services/page.tsx` | Услуги |
+| `/service-bays` | `app/(admin)/service-bays/page.tsx` | Посты обслуживания |
+| `/inventory` | `app/(admin)/inventory/page.tsx` | Склад |
+| `/finance` | `app/(admin)/finance/page.tsx` | Финансы |
+| `/users` | `app/(admin)/users/page.tsx` | Пользователи |
+
+### Календарь записей (`/calendar`)
+- Недельная сетка Пн–Вс, 06:00–20:00, нативный Date + Tailwind (без внешних библиотек)
+- API: `GET /appointments/calendar?from=...&to=...` — overlap-запрос (`scheduledStart < to AND scheduledEnd > from`)
+- Пересекающиеся записи раздвигаются по горизонтали (column layout)
+- Цвет блока по статусу: PENDING=жёлтый, CONFIRMED=синий, IN_PROGRESS=зелёный, COMPLETED=серый
+- Клик по блоку → модалка с деталями + смена статуса + создание заказ-наряда
+
 ## Правила кодирования
 
 ### Язык
