@@ -191,6 +191,26 @@ export default function ClientsPage() {
   );
 }
 
+// --- Helpers ---
+
+const CYR_TO_LAT: Record<string, string> = {
+  'А':'A','В':'B','Е':'E','К':'K','М':'M','Н':'H','О':'O','Р':'P','С':'C','Т':'T','У':'Y','Х':'X',
+  'а':'a','в':'b','е':'e','к':'k','м':'m','н':'h','о':'o','р':'p','с':'c','т':'t','у':'y','х':'x',
+};
+
+function sanitizeMakeModel(val: string): string {
+  const latin = val.split('').map(ch => CYR_TO_LAT[ch] || ch).join('');
+  const cleaned = latin.replace(/[^a-zA-Z0-9\s\-]/g, '');
+  return cleaned.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+}
+
+function sanitizePlate(val: string): string {
+  const latin = val.split('').map(ch => CYR_TO_LAT[ch] || ch).join('');
+  return latin.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+}
+
+// --- Client Modal ---
+
 function ClientModal({
   client,
   onClose,
@@ -207,6 +227,15 @@ function ClientModal({
   const [phone, setPhone] = useState(client?.phone || '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Vehicle fields (only for create)
+  const [make, setMake] = useState('');
+  const [model, setModel] = useState('');
+  const [year, setYear] = useState('');
+  const [licensePlate, setLicensePlate] = useState('');
+  const [vin, setVin] = useState('');
+  const [color, setColor] = useState('');
+  const [mileage, setMileage] = useState('');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -226,7 +255,7 @@ function ClientModal({
         });
       } else {
         const finalEmail = email || `${phone.replace(/\D/g, '')}@client.local`;
-        await apiFetch('/users', {
+        const created: any = await apiFetch('/users', {
           method: 'POST',
           body: JSON.stringify({
             firstName,
@@ -237,6 +266,23 @@ function ClientModal({
             role: 'CLIENT',
           }),
         });
+
+        // Create vehicle if make+model provided
+        if (make && model && created.id) {
+          await apiFetch('/vehicles', {
+            method: 'POST',
+            body: JSON.stringify({
+              clientId: created.id,
+              make,
+              model,
+              year: year ? Number(year) : undefined,
+              licensePlate: licensePlate || undefined,
+              vin: vin || undefined,
+              color: color || undefined,
+              mileage: mileage ? Number(mileage) : undefined,
+            }),
+          });
+        }
       }
       onSuccess();
     } catch (err: any) {
@@ -250,7 +296,7 @@ function ClientModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-gray-900">
           {isEdit ? 'Редактировать клиента' : 'Новый клиент'}
         </h2>
@@ -304,6 +350,66 @@ function ClientModal({
               required={isEdit}
             />
           </div>
+
+          {/* Vehicle — only for new client */}
+          {!isEdit && (
+            <div className="space-y-3 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
+              <p className="text-sm font-medium text-gray-700">Автомобиль</p>
+              <p className="text-[11px] text-gray-400">Кириллица конвертируется в латиницу автоматически</p>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  placeholder="Марка (Toyota, BMW)"
+                  value={make}
+                  onChange={(e) => setMake(sanitizeMakeModel(e.target.value))}
+                  className={inputCls}
+                />
+                <input
+                  placeholder="Модель (Camry, X5)"
+                  value={model}
+                  onChange={(e) => setModel(sanitizeMakeModel(e.target.value))}
+                  className={inputCls}
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <input
+                  placeholder="Год"
+                  type="number"
+                  min={1900}
+                  max={2030}
+                  value={year}
+                  onChange={(e) => setYear(e.target.value)}
+                  className={inputCls}
+                />
+                <input
+                  placeholder="Цвет"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className={inputCls}
+                />
+                <input
+                  placeholder="Пробег (км)"
+                  type="number"
+                  min={0}
+                  value={mileage}
+                  onChange={(e) => setMileage(e.target.value)}
+                  className={inputCls}
+                />
+              </div>
+              <input
+                placeholder="Госномер (A123BC77)"
+                value={licensePlate}
+                onChange={(e) => setLicensePlate(sanitizePlate(e.target.value))}
+                className={inputCls}
+              />
+              <input
+                placeholder="VIN (17 символов)"
+                value={vin}
+                onChange={(e) => setVin(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17))}
+                className={`${inputCls} font-mono`}
+                maxLength={17}
+              />
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
