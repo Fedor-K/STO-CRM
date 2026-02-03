@@ -906,9 +906,10 @@ function AppointmentDetailModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const { data: appointment, isLoading } = useQuery<AppointmentDetail>({
+  const { data: appointment, isLoading, refetch: refetchAppt } = useQuery<AppointmentDetail>({
     queryKey: ['appointment-detail', appointmentId],
     queryFn: () => apiFetch(`/appointments/${appointmentId}`),
+    staleTime: 0,
   });
 
   const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
@@ -978,6 +979,7 @@ function AppointmentDetailModal({
       onUpdate();
     } catch (err: any) {
       setError(err.message || 'Ошибка');
+      refetchAppt();
     } finally {
       setSaving(false);
     }
@@ -1153,9 +1155,10 @@ function WorkOrderDetailModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const { data: wo, isLoading } = useQuery<WorkOrderDetail>({
+  const { data: wo, isLoading, refetch: refetchWo } = useQuery<WorkOrderDetail>({
     queryKey: ['work-order-detail', workOrderId],
     queryFn: () => apiFetch(`/work-orders/${workOrderId}`),
+    staleTime: 0,
   });
 
   const { data: mechanics } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
@@ -1226,6 +1229,7 @@ function WorkOrderDetailModal({
       onUpdate();
     } catch (err: any) {
       setError(err.message || 'Ошибка');
+      refetchWo();
     } finally {
       setSaving(false);
     }
