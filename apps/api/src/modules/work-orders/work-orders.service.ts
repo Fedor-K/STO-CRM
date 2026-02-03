@@ -7,6 +7,15 @@ import { PrismaService } from '../../database/prisma.service';
 import { paginate, type PaginatedResponse } from '../../common/dto/pagination.dto';
 import { WorkOrderStatus } from '@prisma/client';
 
+function parseWONumber(orderNumber: string): number {
+  const match = orderNumber.match(/WO-(\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+function formatWONumber(seq: number): string {
+  return `WO-${String(seq).padStart(5, '0')}`;
+}
+
 const WORK_ORDER_TRANSITIONS: Record<string, string[]> = {
   NEW: ['DIAGNOSED', 'CANCELLED'],
   DIAGNOSED: ['APPROVED', 'CANCELLED'],
@@ -165,15 +174,15 @@ export class WorkOrdersService {
       // Get next order number for this tenant
       const lastOrder = await tx.workOrder.findFirst({
         where: { tenantId },
-        orderBy: { orderNumber: 'desc' },
+        orderBy: { createdAt: 'desc' },
         select: { orderNumber: true },
       });
 
-      const nextNumber = (lastOrder?.orderNumber ?? 0) + 1;
+      const nextSeq = (lastOrder ? parseWONumber(lastOrder.orderNumber) : 0) + 1;
 
       const workOrder = await tx.workOrder.create({
         data: {
-          orderNumber: nextNumber,
+          orderNumber: formatWONumber(nextSeq),
           status: 'NEW',
           tenantId,
           clientId: data.clientId,
@@ -225,15 +234,15 @@ export class WorkOrdersService {
     const workOrder = await this.prisma.$transaction(async (tx) => {
       const lastOrder = await tx.workOrder.findFirst({
         where: { tenantId },
-        orderBy: { orderNumber: 'desc' },
+        orderBy: { createdAt: 'desc' },
         select: { orderNumber: true },
       });
 
-      const nextNumber = (lastOrder?.orderNumber ?? 0) + 1;
+      const nextSeq = (lastOrder ? parseWONumber(lastOrder.orderNumber) : 0) + 1;
 
       const wo = await tx.workOrder.create({
         data: {
-          orderNumber: nextNumber,
+          orderNumber: formatWONumber(nextSeq),
           status: 'NEW',
           tenantId,
           clientId: appointment.clientId,

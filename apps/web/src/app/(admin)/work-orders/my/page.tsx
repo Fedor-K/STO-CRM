@@ -7,7 +7,7 @@ import Link from 'next/link';
 
 interface WorkOrderCard {
   id: string;
-  orderNumber: number;
+  orderNumber: string;
   status: string;
   clientComplaints: string | null;
   totalAmount: string | number;
@@ -45,10 +45,6 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
   PAID: 'bg-emerald-100 text-emerald-700',
 };
 
-function formatWONumber(n: number): string {
-  return `WO-${String(n).padStart(5, '0')}`;
-}
-
 function formatMoney(amount: number | string): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (!num) return '0 ₽';
@@ -81,7 +77,7 @@ export default function MyWorkOrdersPage() {
                 className="block rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:shadow-md"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-primary-600">{formatWONumber(wo.orderNumber)}</span>
+                  <span className="text-sm font-bold text-primary-600">{wo.orderNumber}</span>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE_COLORS[wo.status] || 'bg-gray-100'}`}>
                     {STATUS_LABELS[wo.status] || wo.status}
                   </span>

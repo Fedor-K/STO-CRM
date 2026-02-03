@@ -26,7 +26,7 @@ interface WorkLogEntry {
 
 interface WorkOrderDetail {
   id: string;
-  orderNumber: number;
+  orderNumber: string;
   status: string;
   clientComplaints: string | null;
   diagnosticNotes: string | null;
@@ -84,10 +84,6 @@ const TRANSITIONS: Record<string, string[]> = {
   CLOSED: [],
   CANCELLED: [],
 };
-
-function formatWONumber(n: number): string {
-  return `WO-${String(n).padStart(5, '0')}`;
-}
 
 function formatMoney(amount: number | string): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -147,7 +143,7 @@ export default function WorkOrderDetailPage() {
             &larr;
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">
-            {formatWONumber(wo.orderNumber)}
+            {wo.orderNumber}
           </h1>
           <span className={`rounded-full px-3 py-1 text-sm font-medium ${STATUS_BADGE_COLORS[wo.status] || 'bg-gray-100'}`}>
             {STATUS_LABELS[wo.status]}

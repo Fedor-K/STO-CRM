@@ -6,7 +6,7 @@ import { apiFetch } from '@/lib/api';
 
 interface WorkOrder {
   id: string;
-  orderNumber: number;
+  orderNumber: string;
   status: string;
   clientComplaints: string | null;
   totalAmount: string | number;
@@ -50,10 +50,6 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
 
 const STATUS_STEPS = ['NEW', 'DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'COMPLETED', 'INVOICED', 'PAID', 'CLOSED'];
 
-function formatWONumber(n: number): string {
-  return `WO-${String(n).padStart(5, '0')}`;
-}
-
 function formatMoney(amount: number | string): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (!num) return '0 ₽';
@@ -95,7 +91,7 @@ export default function MyOrdersPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <span className="text-lg font-bold text-primary-600">
-                        {formatWONumber(wo.orderNumber)}
+                        {wo.orderNumber}
                       </span>
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE_COLORS[wo.status] || 'bg-gray-100'}`}>
                         {STATUS_LABELS[wo.status]}
