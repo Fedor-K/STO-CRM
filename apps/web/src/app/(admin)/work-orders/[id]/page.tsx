@@ -130,6 +130,12 @@ export default function WorkOrderDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['work-order', id] }),
   });
 
+  const updateFieldMutation = useMutation({
+    mutationFn: (data: Record<string, string | null>) =>
+      apiFetch(`/work-orders/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['work-order', id] }),
+  });
+
   if (isLoading) return <div className="py-8 text-center text-gray-500">Загрузка...</div>;
   if (!wo) return <div className="py-8 text-center text-gray-500">Заказ-наряд не найден</div>;
 
@@ -219,18 +225,25 @@ export default function WorkOrderDetailPage() {
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <h3 className="text-sm font-semibold uppercase text-gray-500">Информация</h3>
           <div className="mt-2 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Механик</span>
-              <span className="text-gray-900">{wo.mechanic ? `${wo.mechanic.firstName} ${wo.mechanic.lastName}` : '—'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Приёмщик</span>
-              <span className="text-gray-900">{wo.advisor ? `${wo.advisor.firstName} ${wo.advisor.lastName}` : '—'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Пост</span>
-              <span className="text-gray-900">{wo.serviceBay?.name || '—'}</span>
-            </div>
+            <AssignField
+              label="Механик"
+              currentValue={wo.mechanic ? `${wo.mechanic.firstName} ${wo.mechanic.lastName}` : null}
+              fetchUrl="/users?limit=100&sort=firstName&order=asc&role=MECHANIC"
+              onAssign={(userId) => updateFieldMutation.mutate({ mechanicId: userId || null })}
+            />
+            <AssignField
+              label="Приёмщик"
+              currentValue={wo.advisor ? `${wo.advisor.firstName} ${wo.advisor.lastName}` : null}
+              fetchUrl="/users?limit=100&sort=firstName&order=asc&role=RECEPTIONIST"
+              onAssign={(userId) => updateFieldMutation.mutate({ advisorId: userId || null })}
+            />
+            <AssignField
+              label="Пост"
+              currentValue={wo.serviceBay?.name || null}
+              fetchUrl="/service-bays?isActive=true&limit=50"
+              fieldType="bay"
+              onAssign={(bayId) => updateFieldMutation.mutate({ serviceBayId: bayId || null })}
+            />
             {wo.mileageAtIntake != null && (
               <div className="flex justify-between">
                 <span className="text-gray-500">Пробег</span>
@@ -763,6 +776,68 @@ function AddWorkLogModal({
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function AssignField({
+  label,
+  currentValue,
+  fetchUrl,
+  fieldType = 'user',
+  onAssign,
+}: {
+  label: string;
+  currentValue: string | null;
+  fetchUrl: string;
+  fieldType?: 'user' | 'bay';
+  onAssign: (id: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const { data } = useQuery<{ data: any[] }>({
+    queryKey: ['assign-field', fetchUrl],
+    queryFn: () => apiFetch(fetchUrl),
+    enabled: editing,
+  });
+
+  if (editing) {
+    return (
+      <div className="flex items-center justify-between">
+        <span className="text-gray-500">{label}</span>
+        <select
+          autoFocus
+          className="w-48 rounded border border-gray-300 px-2 py-1 text-sm focus:border-primary-500 focus:outline-none"
+          defaultValue=""
+          onChange={(e) => {
+            onAssign(e.target.value);
+            setEditing(false);
+          }}
+          onBlur={() => setEditing(false)}
+        >
+          <option value="">Не назначен</option>
+          {data?.data?.map((item: any) => (
+            <option key={item.id} value={item.id}>
+              {fieldType === 'bay' ? item.name : `${item.firstName} ${item.lastName}`}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-gray-500">{label}</span>
+      <button
+        onClick={() => setEditing(true)}
+        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-gray-900 hover:bg-primary-50 hover:text-primary-600"
+        title="Нажмите для изменения"
+      >
+        {currentValue || '—'}
+        <svg className="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+        </svg>
+      </button>
     </div>
   );
 }

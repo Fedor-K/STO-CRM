@@ -14,4 +14,10 @@ export class DashboardController {
   getStats(@CurrentTenant() tenantId: string) {
     return this.service.getStats(tenantId);
   }
+
+  @Get('funnel')
+  @ApiOperation({ summary: 'Воронка клиентов — от обращения до выдачи' })
+  getClientFunnel(@CurrentTenant() tenantId: string) {
+    return this.service.getClientFunnel(tenantId);
+  }
 }
