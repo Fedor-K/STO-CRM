@@ -367,7 +367,11 @@ function CreateAppointmentModal({
   // New vehicle fields
   const [newMake, setNewMake] = useState('');
   const [newModel, setNewModel] = useState('');
+  const [newYear, setNewYear] = useState('');
+  const [newVin, setNewVin] = useState('');
   const [newLicensePlate, setNewLicensePlate] = useState('');
+  const [newColor, setNewColor] = useState('');
+  const [newMileage, setNewMileage] = useState('');
 
   // Appointment fields
   const [date, setDate] = useState('');
@@ -445,7 +449,11 @@ function CreateAppointmentModal({
           body: JSON.stringify({
             make: newMake,
             model: newModel,
+            year: newYear ? Number(newYear) : undefined,
+            vin: newVin || undefined,
             licensePlate: newLicensePlate || undefined,
+            color: newColor || undefined,
+            mileage: newMileage ? Number(newMileage) : undefined,
             clientId: finalClientId,
           }),
         });
@@ -588,11 +596,43 @@ function CreateAppointmentModal({
                       required
                     />
                   </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input
+                      placeholder="Год (2020)"
+                      type="number"
+                      min={1900}
+                      max={2030}
+                      value={newYear}
+                      onChange={(e) => setNewYear(e.target.value)}
+                      className={inputCls}
+                    />
+                    <input
+                      placeholder="Цвет"
+                      value={newColor}
+                      onChange={(e) => setNewColor(e.target.value)}
+                      className={inputCls}
+                    />
+                    <input
+                      placeholder="Пробег (км)"
+                      type="number"
+                      min={0}
+                      value={newMileage}
+                      onChange={(e) => setNewMileage(e.target.value)}
+                      className={inputCls}
+                    />
+                  </div>
                   <input
                     placeholder="Госномер (A123BC77)"
                     value={newLicensePlate}
                     onChange={(e) => setNewLicensePlate(sanitizePlate(e.target.value))}
                     className={inputCls}
+                  />
+                  <input
+                    placeholder="VIN (17 символов)"
+                    value={newVin}
+                    onChange={(e) => setNewVin(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 17))}
+                    className={`${inputCls} font-mono`}
+                    maxLength={17}
                   />
                 </div>
               ) : (
