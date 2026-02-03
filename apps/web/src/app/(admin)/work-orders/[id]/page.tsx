@@ -105,6 +105,7 @@ export default function WorkOrderDetailPage() {
 
   const [tab, setTab] = useState<'items' | 'logs'>('items');
   const [showAddItem, setShowAddItem] = useState(false);
+  const [editItem, setEditItem] = useState<WorkOrderDetail['items'][0] | null>(null);
   const [showAddLog, setShowAddLog] = useState(false);
 
   const { data: wo, isLoading } = useQuery<WorkOrderDetail>({
@@ -346,10 +347,16 @@ export default function WorkOrderDetailPage() {
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">{formatMoney(item.totalPrice)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
                           <button
+                            onClick={() => setEditItem(item)}
+                            className="text-primary-600 hover:text-primary-800"
+                          >
+                            Изменить
+                          </button>
+                          <button
                             onClick={() => {
                               if (confirm('Удалить позицию?')) deleteItemMutation.mutate(item.id);
                             }}
-                            className="text-red-600 hover:text-red-800"
+                            className="ml-3 text-red-600 hover:text-red-800"
                           >
                             Удалить
                           </button>
@@ -405,6 +412,17 @@ export default function WorkOrderDetailPage() {
           onClose={() => setShowAddItem(false)}
           onSuccess={() => {
             setShowAddItem(false);
+            queryClient.invalidateQueries({ queryKey: ['work-order', id] });
+          }}
+        />
+      )}
+      {editItem && (
+        <EditItemModal
+          workOrderId={id}
+          item={editItem}
+          onClose={() => setEditItem(null)}
+          onSuccess={() => {
+            setEditItem(null);
             queryClient.invalidateQueries({ queryKey: ['work-order', id] });
           }}
         />
@@ -528,7 +546,7 @@ function AddItemModal({
                   value={normHours}
                   onChange={(e) => setNormHours(e.target.value)}
                   min="0"
-                  step="0.1"
+                  step="any"
                   className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
                 />
               </div>
@@ -541,6 +559,124 @@ function AddItemModal({
             </button>
             <button type="submit" disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
               {saving ? 'Сохранение...' : 'Добавить'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EditItemModal({
+  workOrderId,
+  item,
+  onClose,
+  onSuccess,
+}: {
+  workOrderId: string;
+  item: WorkOrderDetail['items'][0];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [description, setDescription] = useState(item.description);
+  const [quantity, setQuantity] = useState(String(Number(item.quantity)));
+  const [unitPrice, setUnitPrice] = useState(String(Number(item.unitPrice)));
+  const [normHours, setNormHours] = useState(item.normHours ? String(Number(item.normHours)) : '');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    if (!description || !unitPrice) {
+      setError('Заполните описание и цену');
+      return;
+    }
+    setSaving(true);
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items/${item.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          description,
+          quantity: Number(quantity),
+          unitPrice: Number(unitPrice),
+          normHours: normHours ? Number(normHours) : undefined,
+        }),
+      });
+      onSuccess();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-gray-900">Редактировать позицию</h2>
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Тип: {item.type === 'LABOR' ? 'Работа' : 'Запчасть'}
+            </label>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Описание *</label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Кол-во</label>
+              <input
+                type="number"
+                value={quantity}
+                onChange={(e) => setQuantity(e.target.value)}
+                min="0.01"
+                step="0.01"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Цена *</label>
+              <input
+                type="number"
+                value={unitPrice}
+                onChange={(e) => setUnitPrice(e.target.value)}
+                min="0"
+                step="0.01"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                required
+              />
+            </div>
+            {item.type === 'LABOR' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Норм-ч.</label>
+                <input
+                  type="number"
+                  value={normHours}
+                  onChange={(e) => setNormHours(e.target.value)}
+                  min="0"
+                  step="any"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+              </div>
+            )}
+          </div>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              Отмена
+            </button>
+            <button type="submit" disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+              {saving ? 'Сохранение...' : 'Сохранить'}
             </button>
           </div>
         </form>
@@ -609,8 +745,8 @@ function AddWorkLogModal({
               type="number"
               value={hoursWorked}
               onChange={(e) => setHoursWorked(e.target.value)}
-              min="0.01"
-              step="0.25"
+              min="0.1"
+              step="any"
               placeholder="Например: 1.5"
               className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               required

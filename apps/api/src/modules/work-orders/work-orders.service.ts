@@ -320,7 +320,16 @@ export class WorkOrdersService {
       );
     }
 
-    await this.prisma.workOrder.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      // If WO was created from appointment, reset appointment status
+      if (workOrder.appointmentId) {
+        await tx.appointment.update({
+          where: { id: workOrder.appointmentId },
+          data: { status: 'CONFIRMED' },
+        });
+      }
+      await tx.workOrder.delete({ where: { id } });
+    });
   }
 
   // --- Items ---

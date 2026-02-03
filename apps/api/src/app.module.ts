@@ -11,6 +11,7 @@ import { ServiceBaysModule } from './modules/service-bays/service-bays.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TenantScopeInterceptor } from './common/interceptors/tenant-scope.interceptor';
@@ -30,6 +31,7 @@ import { TenantScopeInterceptor } from './common/interceptors/tenant-scope.inter
     VehiclesModule,
     AppointmentsModule,
     WorkOrdersModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [

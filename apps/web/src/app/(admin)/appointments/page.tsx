@@ -33,6 +33,15 @@ const STATUS_LABELS: Record<string, string> = {
   NO_SHOW: 'Не явился',
 };
 
+const APPOINTMENT_TRANSITIONS: Record<string, string[]> = {
+  PENDING: ['CONFIRMED', 'CANCELLED', 'NO_SHOW'],
+  CONFIRMED: ['CANCELLED', 'NO_SHOW'],
+  IN_PROGRESS: ['COMPLETED', 'CANCELLED'],
+  COMPLETED: [],
+  CANCELLED: [],
+  NO_SHOW: [],
+};
+
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-yellow-100 text-yellow-700',
   CONFIRMED: 'bg-blue-100 text-blue-700',
@@ -168,29 +177,34 @@ export default function AppointmentsPage() {
                       {appt.serviceBay?.name || '—'}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <select
-                        value={appt.status}
-                        onChange={(e) => statusMutation.mutate({ id: appt.id, status: e.target.value })}
-                        className={`rounded-full border-0 px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[appt.status] || 'bg-gray-100'}`}
-                      >
-                        {Object.entries(STATUS_LABELS).map(([k, v]) => (
-                          <option key={k} value={k}>{v}</option>
-                        ))}
-                      </select>
+                      {(APPOINTMENT_TRANSITIONS[appt.status] || []).length > 0 ? (
+                        <select
+                          value={appt.status}
+                          onChange={(e) => statusMutation.mutate({ id: appt.id, status: e.target.value })}
+                          className={`rounded-full border-0 px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[appt.status] || 'bg-gray-100'}`}
+                        >
+                          <option value={appt.status}>{STATUS_LABELS[appt.status]}</option>
+                          {(APPOINTMENT_TRANSITIONS[appt.status] || []).map((s) => (
+                            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[appt.status] || 'bg-gray-100'}`}>
+                          {STATUS_LABELS[appt.status] || appt.status}
+                        </span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
                       <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => {
-                            if (confirm('Создать заказ-наряд из этой записи?')) {
-                              createWOMutation.mutate(appt.id);
-                            }
-                          }}
-                          disabled={createWOMutation.isPending}
-                          className="text-primary-600 hover:text-primary-800 disabled:opacity-50"
-                        >
-                          Создать ЗН
-                        </button>
+                        {['PENDING', 'CONFIRMED'].includes(appt.status) && (
+                          <button
+                            onClick={() => createWOMutation.mutate(appt.id)}
+                            disabled={createWOMutation.isPending}
+                            className="text-primary-600 hover:text-primary-800 disabled:opacity-50"
+                          >
+                            {createWOMutation.isPending ? 'Создание...' : 'Создать ЗН'}
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             if (confirm(`Удалить запись от ${formatDateTime(appt.scheduledStart)}?`)) {

@@ -57,7 +57,8 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
         throw new ApiError(retryRes.status, error.message, error.details);
       }
 
-      return retryRes.json();
+      const retryText = await retryRes.text();
+      return retryText ? JSON.parse(retryText) : null;
     }
 
     // Refresh не удался — разлогиниваем
@@ -71,7 +72,8 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
     throw new ApiError(res.status, error.message, error.details);
   }
 
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 export { ApiError };
