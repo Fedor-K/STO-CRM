@@ -1128,7 +1128,7 @@ interface WorkOrderDetail {
     description: string;
     quantity: number;
     unitPrice: string | number;
-    total: string | number;
+    totalPrice: string | number;
     normHours: number | null;
   }[];
   workLogs: {
@@ -1176,7 +1176,7 @@ function WorkOrderDetailModal({
 
   // New item form
   const [showAddItem, setShowAddItem] = useState(false);
-  const [itemType, setItemType] = useState<'SERVICE' | 'PART'>('SERVICE');
+  const [itemType, setItemType] = useState<'LABOR' | 'PART'>('LABOR');
   const [itemDesc, setItemDesc] = useState('');
   const [itemQty, setItemQty] = useState('1');
   const [itemPrice, setItemPrice] = useState('');
@@ -1377,8 +1377,8 @@ function WorkOrderDetailModal({
               {showAddItem && (
                 <div className="mt-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
                   <div className="grid grid-cols-2 gap-2">
-                    <select value={itemType} onChange={(e) => setItemType(e.target.value as 'SERVICE' | 'PART')} className={inputCls}>
-                      <option value="SERVICE">Работа</option>
+                    <select value={itemType} onChange={(e) => setItemType(e.target.value as 'LABOR' | 'PART')} className={inputCls}>
+                      <option value="LABOR">Работа</option>
                       <option value="PART">Запчасть</option>
                     </select>
                     <input
@@ -1420,8 +1420,8 @@ function WorkOrderDetailModal({
                   {wo.items.map((item) => (
                     <div key={item.id} className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-xs">
                       <div className="flex-1">
-                        <span className={`mr-1.5 rounded px-1 py-0.5 text-[10px] font-medium ${item.type === 'SERVICE' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                          {item.type === 'SERVICE' ? 'Работа' : 'Запчасть'}
+                        <span className={`mr-1.5 rounded px-1 py-0.5 text-[10px] font-medium ${item.type === 'LABOR' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {item.type === 'LABOR' ? 'Работа' : 'Запчасть'}
                         </span>
                         <span className="text-gray-700">{item.description}</span>
                         <span className="ml-1 text-gray-400">
@@ -1429,7 +1429,7 @@ function WorkOrderDetailModal({
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-700">{formatMoney(item.total)}</span>
+                        <span className="font-semibold text-gray-700">{formatMoney(item.totalPrice)}</span>
                         {isEditable && (
                           <button
                             onClick={() => handleDeleteItem(item.id)}
