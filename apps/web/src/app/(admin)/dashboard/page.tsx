@@ -487,23 +487,30 @@ function CreateAppointmentModal({
   });
 
   // Fetch schedule for selected bay + date
-  const { data: baySchedule } = useQuery<{ data: { id: string; scheduledStart: string; scheduledEnd: string; client: { firstName: string; lastName: string }; vehicle: { make: string; model: string } }[] }>({
+  const INACTIVE_STATUSES = ['CANCELLED', 'COMPLETED', 'NO_SHOW', 'IN_PROGRESS'];
+  const { data: baySchedule } = useQuery<{ data: { id: string; status: string; scheduledStart: string; scheduledEnd: string; client: { firstName: string; lastName: string }; vehicle: { make: string; model: string } }[] }>({
     queryKey: ['bay-schedule', serviceBayId, date],
     queryFn: () => apiFetch(`/appointments?limit=50&sort=scheduledStart&order=asc&from=${date}T00:00:00&to=${date}T23:59:59&serviceBayId=${serviceBayId}`),
     enabled: !!serviceBayId && !!date,
   });
 
+  // Только активные заявки (не завершённые, не отменённые, не перешедшие в ЗН)
+  const activeSchedule = useMemo(() => {
+    if (!baySchedule?.data) return [];
+    return baySchedule.data.filter((a) => !INACTIVE_STATUSES.includes(a.status));
+  }, [baySchedule]);
+
   // Проверка конфликта времени на выбранном посту
   const hasConflict = useMemo(() => {
-    if (!serviceBayId || !date || !startTime || !endTime || !baySchedule?.data?.length) return false;
+    if (!serviceBayId || !date || !startTime || !endTime || !activeSchedule.length) return false;
     const reqStart = new Date(`${date}T${startTime}:00`);
     const reqEnd = new Date(`${date}T${endTime}:00`);
-    return baySchedule.data.some((appt) => {
+    return activeSchedule.some((appt) => {
       const s = new Date(appt.scheduledStart);
       const e = new Date(appt.scheduledEnd);
       return s < reqEnd && e > reqStart;
     });
-  }, [serviceBayId, date, startTime, endTime, baySchedule]);
+  }, [serviceBayId, date, startTime, endTime, activeSchedule]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -784,10 +791,10 @@ function CreateAppointmentModal({
                 <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
               ))}
             </select>
-            {serviceBayId && date && baySchedule?.data && baySchedule.data.length > 0 && (() => {
+            {serviceBayId && date && activeSchedule.length > 0 && (() => {
               const reqStart = new Date(`${date}T${startTime}:00`);
               const reqEnd = new Date(`${date}T${endTime}:00`);
-              const conflicting = baySchedule.data.filter((appt) => {
+              const conflicting = activeSchedule.filter((appt) => {
                 const s = new Date(appt.scheduledStart);
                 const e = new Date(appt.scheduledEnd);
                 return s < reqEnd && e > reqStart;
@@ -801,7 +808,7 @@ function CreateAppointmentModal({
                     <p className="text-xs font-medium text-amber-700">Занято на {new Date(date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })} (без пересечений):</p>
                   )}
                   <ul className="mt-1 space-y-0.5">
-                    {baySchedule.data.map((appt) => {
+                    {activeSchedule.map((appt) => {
                       const isConflict = conflicting.some((c) => c.id === appt.id);
                       return (
                         <li key={appt.id} className={`text-xs ${isConflict ? 'font-bold text-red-700' : 'text-amber-600'}`}>
@@ -820,7 +827,7 @@ function CreateAppointmentModal({
                 </div>
               );
             })()}
-            {serviceBayId && date && baySchedule?.data && baySchedule.data.length === 0 && (
+            {serviceBayId && date && baySchedule?.data && activeSchedule.length === 0 && (
               <p className="mt-1 text-xs text-green-600">Пост свободен весь день</p>
             )}
           </div>
