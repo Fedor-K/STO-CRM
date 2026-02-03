@@ -27,7 +27,7 @@ export class AppointmentsService {
     const where: any = {
       tenantId,
       serviceBayId,
-      status: { notIn: ['CANCELLED', 'COMPLETED', 'NO_SHOW'] },
+      status: { notIn: ['CANCELLED', 'COMPLETED', 'NO_SHOW', 'IN_PROGRESS'] },
       scheduledStart: { lt: end },
       scheduledEnd: { gt: start },
     };
