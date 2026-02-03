@@ -92,9 +92,10 @@ export class AppointmentsController {
   @ApiQuery({ name: 'clientId', required: false })
   @ApiQuery({ name: 'from', required: false, description: 'ISO date' })
   @ApiQuery({ name: 'to', required: false, description: 'ISO date' })
+  @ApiQuery({ name: 'serviceBayId', required: false })
   findAll(
     @CurrentTenant() tenantId: string,
-    @Query() query: PaginationDto & { status?: AppointmentStatus; clientId?: string; from?: string; to?: string },
+    @Query() query: PaginationDto & { status?: AppointmentStatus; clientId?: string; from?: string; to?: string; serviceBayId?: string },
   ) {
     return this.appointmentsService.findAll(tenantId, {
       page: Number(query.page) || 1,
@@ -105,6 +106,7 @@ export class AppointmentsController {
       clientId: query.clientId,
       from: query.from,
       to: query.to,
+      serviceBayId: query.serviceBayId,
     });
   }
 

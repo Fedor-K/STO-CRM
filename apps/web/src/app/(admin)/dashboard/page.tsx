@@ -399,6 +399,13 @@ function CreateAppointmentModal({
     queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
   });
 
+  // Fetch schedule for selected bay + date
+  const { data: baySchedule } = useQuery<{ data: { id: string; scheduledStart: string; scheduledEnd: string; client: { firstName: string; lastName: string }; vehicle: { make: string; model: string } }[] }>({
+    queryKey: ['bay-schedule', serviceBayId, date],
+    queryFn: () => apiFetch(`/appointments?limit=50&sort=scheduledStart&order=asc&from=${date}T00:00:00&to=${date}T23:59:59&serviceBayId=${serviceBayId}`),
+    enabled: !!serviceBayId && !!date,
+  });
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -678,6 +685,27 @@ function CreateAppointmentModal({
                 <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
               ))}
             </select>
+            {serviceBayId && date && baySchedule?.data && baySchedule.data.length > 0 && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2">
+                <p className="text-xs font-medium text-amber-700">Занято на {new Date(date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}:</p>
+                <ul className="mt-1 space-y-0.5">
+                  {baySchedule.data.map((appt) => (
+                    <li key={appt.id} className="text-xs text-amber-600">
+                      {new Date(appt.scheduledStart).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                      {' – '}
+                      {new Date(appt.scheduledEnd).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                      {' · '}
+                      {appt.client.firstName} {appt.client.lastName}
+                      {' · '}
+                      {appt.vehicle.make} {appt.vehicle.model}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {serviceBayId && date && baySchedule?.data && baySchedule.data.length === 0 && (
+              <p className="mt-1 text-xs text-green-600">Пост свободен весь день</p>
+            )}
           </div>
 
           {/* --- Source --- */}

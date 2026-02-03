@@ -25,14 +25,16 @@ export class AppointmentsService {
       clientId?: string;
       from?: string;
       to?: string;
+      serviceBayId?: string;
     },
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, sort, order, status, clientId, from, to } = params;
+    const { page, limit, sort, order, status, clientId, from, to, serviceBayId } = params;
     const skip = (page - 1) * limit;
 
     const where: any = { tenantId };
     if (status) where.status = status;
     if (clientId) where.clientId = clientId;
+    if (serviceBayId) where.serviceBayId = serviceBayId;
     if (from || to) {
       where.scheduledStart = {};
       if (from) where.scheduledStart.gte = new Date(from);
