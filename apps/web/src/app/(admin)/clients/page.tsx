@@ -86,7 +86,6 @@ export default function ClientsPage() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Клиент</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Телефон</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Email</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Дата регистрации</th>
                   <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Действия</th>
                 </tr>
@@ -123,7 +122,6 @@ export default function ClientsPage() {
                       )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">{client.phone || '—'}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">{client.email}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
                       {new Date(client.createdAt).toLocaleDateString('ru-RU')}
                     </td>
@@ -223,7 +221,6 @@ function ClientModal({
   const isEdit = !!client;
   const [firstName, setFirstName] = useState(client?.firstName || '');
   const [lastName, setLastName] = useState(client?.lastName || '');
-  const [email, setEmail] = useState(client?.email || '');
   const [phone, setPhone] = useState(client?.phone || '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -249,12 +246,11 @@ function ClientModal({
           body: JSON.stringify({
             firstName,
             lastName,
-            email,
             phone: phone || undefined,
           }),
         });
       } else {
-        const finalEmail = email || `${phone.replace(/\D/g, '')}@client.local`;
+        const finalEmail = `${phone.replace(/\D/g, '')}@client.local`;
         const created: any = await apiFetch('/users', {
           method: 'POST',
           body: JSON.stringify({
@@ -334,20 +330,6 @@ function ClientModal({
               placeholder="+79001234567"
               className={inputCls}
               required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Email {isEdit ? '' : '(необязательно)'}
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={isEdit ? '' : 'Если не указан — сгенерируется автоматически'}
-              className={inputCls}
-              required={isEdit}
             />
           </div>
 
