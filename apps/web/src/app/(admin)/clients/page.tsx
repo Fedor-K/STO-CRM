@@ -104,6 +104,50 @@ function formatDateTime(dateStr: string): string {
 
 // --- Page ---
 
+// --- Detail modal constants ---
+
+const STATUS_LABELS: Record<string, string> = {
+  NEW: 'Новый',
+  DIAGNOSED: 'Диагностика',
+  APPROVED: 'Согласован',
+  IN_PROGRESS: 'В работе',
+  PAUSED: 'Пауза',
+  COMPLETED: 'Выполнен',
+  INVOICED: 'Счёт выставлен',
+  PAID: 'Оплачен',
+  CLOSED: 'Закрыт',
+  CANCELLED: 'Отменён',
+};
+
+const CARD_BADGE_COLORS: Record<string, string> = {
+  NEW: 'bg-gray-200 text-gray-700',
+  DIAGNOSED: 'bg-blue-100 text-blue-700',
+  APPROVED: 'bg-indigo-100 text-indigo-700',
+  IN_PROGRESS: 'bg-yellow-100 text-yellow-700',
+  PAUSED: 'bg-orange-100 text-orange-700',
+  COMPLETED: 'bg-green-100 text-green-700',
+  INVOICED: 'bg-purple-100 text-purple-700',
+  PAID: 'bg-emerald-100 text-emerald-700',
+};
+
+const WO_NEXT_STATUS: Record<string, { status: string; label: string }> = {
+  NEW: { status: 'DIAGNOSED', label: 'Диагностика →' },
+  DIAGNOSED: { status: 'APPROVED', label: 'Согласовать →' },
+  APPROVED: { status: 'IN_PROGRESS', label: 'В работу →' },
+  IN_PROGRESS: { status: 'COMPLETED', label: 'Готово →' },
+  PAUSED: { status: 'IN_PROGRESS', label: 'Возобновить →' },
+  COMPLETED: { status: 'INVOICED', label: 'Выставить счёт →' },
+  INVOICED: { status: 'PAID', label: 'Оплачен →' },
+  PAID: { status: 'CLOSED', label: 'Выдать →' },
+};
+
+function formatShortDate(dateStr: string): string {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+}
+
+// --- Page ---
+
 export default function ClientsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
@@ -111,6 +155,8 @@ export default function ClientsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editClient, setEditClient] = useState<ClientData | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | null>(null);
+  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<PaginatedResponse<ClientData>>({
     queryKey: ['clients', page, search],
@@ -164,6 +210,8 @@ export default function ClientsPage() {
                     deleteMutation.mutate(client.id);
                   }
                 }}
+                onOpenAppointment={(id) => setSelectedAppointmentId(id)}
+                onOpenWorkOrder={(id) => setSelectedWorkOrderId(id)}
               />
             ))}
           </div>
@@ -204,6 +252,28 @@ export default function ClientsPage() {
           }}
         />
       )}
+
+      {selectedAppointmentId && (
+        <AppointmentDetailModal
+          appointmentId={selectedAppointmentId}
+          onClose={() => setSelectedAppointmentId(null)}
+          onUpdate={() => {
+            setSelectedAppointmentId(null);
+            queryClient.invalidateQueries({ queryKey: ['client-appointments'] });
+          }}
+        />
+      )}
+
+      {selectedWorkOrderId && (
+        <WorkOrderDetailModal
+          workOrderId={selectedWorkOrderId}
+          onClose={() => setSelectedWorkOrderId(null)}
+          onUpdate={() => {
+            setSelectedWorkOrderId(null);
+            queryClient.invalidateQueries({ queryKey: ['client-work-orders'] });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -216,12 +286,16 @@ function ClientCard({
   onToggle,
   onEdit,
   onDelete,
+  onOpenAppointment,
+  onOpenWorkOrder,
 }: {
   client: ClientData;
   isExpanded: boolean;
   onToggle: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onOpenAppointment: (id: string) => void;
+  onOpenWorkOrder: (id: string) => void;
 }) {
   const { data: vehicles } = useQuery<PaginatedResponse<VehicleData>>({
     queryKey: ['client-vehicles', client.id],
@@ -316,7 +390,11 @@ function ClientCard({
             {appointments?.data?.length ? (
               <div className="mt-2 space-y-1.5">
                 {appointments.data.map((a) => (
-                  <div key={a.id} className="flex items-center justify-between rounded bg-gray-50 px-3 py-2 text-xs">
+                  <div
+                    key={a.id}
+                    onClick={() => onOpenAppointment(a.id)}
+                    className="flex cursor-pointer items-center justify-between rounded bg-gray-50 px-3 py-2 text-xs transition hover:bg-gray-100"
+                  >
                     <div>
                       <span className="font-medium text-gray-700">{formatDateTime(a.scheduledStart)}</span>
                       <span className="ml-2 text-gray-500">
@@ -346,7 +424,11 @@ function ClientCard({
             {workOrders?.data?.length ? (
               <div className="mt-2 space-y-1.5">
                 {workOrders.data.map((wo) => (
-                  <div key={wo.id} className="flex items-center justify-between rounded bg-gray-50 px-3 py-2 text-xs">
+                  <div
+                    key={wo.id}
+                    onClick={() => onOpenWorkOrder(wo.id)}
+                    className="flex cursor-pointer items-center justify-between rounded bg-gray-50 px-3 py-2 text-xs transition hover:bg-gray-100"
+                  >
                     <div>
                       <span className="font-bold text-primary-600">{wo.orderNumber}</span>
                       <span className="ml-2 text-gray-500">
@@ -602,6 +684,578 @@ function ClientModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// --- Appointment Detail Modal ---
+
+interface AppointmentDetail {
+  id: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+  status: string;
+  notes: string | null;
+  source: string | null;
+  adChannel: string | null;
+  client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null };
+  advisor: { id: string; firstName: string; lastName: string } | null;
+  serviceBay: { id: string; name: string; type: string | null } | null;
+}
+
+function AppointmentDetailModal({
+  appointmentId,
+  onClose,
+  onUpdate,
+}: {
+  appointmentId: string;
+  onClose: () => void;
+  onUpdate: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const { data: appointment, isLoading } = useQuery<AppointmentDetail>({
+    queryKey: ['appointment-detail', appointmentId],
+    queryFn: () => apiFetch(`/appointments/${appointmentId}`),
+    staleTime: 0,
+  });
+
+  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
+    queryKey: ['bays-modal'],
+    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
+  });
+
+  const { data: advisors } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
+    queryKey: ['advisors-modal'],
+    queryFn: () => apiFetch('/users?limit=50&role=RECEPTIONIST'),
+  });
+
+  const [notes, setNotes] = useState('');
+  const [serviceBayId, setServiceBayId] = useState('');
+  const [advisorId, setAdvisorId] = useState('');
+  const [date, setDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [initialized, setInitialized] = useState(false);
+
+  if (appointment && !initialized) {
+    setNotes(appointment.notes || '');
+    setServiceBayId(appointment.serviceBay?.id || '');
+    setAdvisorId(appointment.advisor?.id || '');
+    const start = new Date(appointment.scheduledStart);
+    const end = new Date(appointment.scheduledEnd);
+    setDate(start.toISOString().slice(0, 10));
+    setStartTime(start.toTimeString().slice(0, 5));
+    setEndTime(end.toTimeString().slice(0, 5));
+    setInitialized(true);
+  }
+
+  const isEditable = appointment && !['COMPLETED', 'CANCELLED', 'NO_SHOW', 'IN_PROGRESS'].includes(appointment.status);
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`/appointments/${appointmentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          notes: notes || null,
+          serviceBayId: serviceBayId || null,
+          advisorId: advisorId || null,
+          scheduledStart: `${date}T${startTime}:00`,
+          scheduledEnd: `${date}T${endTime}:00`,
+        }),
+      });
+      onUpdate();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка сохранения');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold text-gray-900">Запись</h2>
+            {appointment && (
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                appointment.status === 'CANCELLED' || appointment.status === 'NO_SHOW' ? 'bg-red-100 text-red-600' :
+                appointment.status === 'COMPLETED' || appointment.status === 'IN_PROGRESS' ? 'bg-green-100 text-green-700' :
+                'bg-blue-100 text-blue-700'
+              }`}>
+                {APPT_STATUS[appointment.status] || appointment.status}
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        {isLoading ? (
+          <div className="py-8 text-center text-gray-500">Загрузка...</div>
+        ) : appointment ? (
+          <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs font-medium text-gray-500">Клиент</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  {appointment.client.firstName} {appointment.client.lastName}
+                </p>
+                {appointment.client.phone && <p className="text-xs text-gray-600">{appointment.client.phone}</p>}
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs font-medium text-gray-500">Автомобиль</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  {appointment.vehicle.make} {appointment.vehicle.model}
+                  {appointment.vehicle.year ? ` (${appointment.vehicle.year})` : ''}
+                </p>
+                {appointment.vehicle.licensePlate && <p className="text-xs text-gray-600">{appointment.vehicle.licensePlate}</p>}
+              </div>
+            </div>
+
+            {isEditable ? (
+              <>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Дата</label>
+                    <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Начало</label>
+                    <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Конец</label>
+                    <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">Рабочий пост</label>
+                  <select value={serviceBayId} onChange={(e) => setServiceBayId(e.target.value)} className={inputCls}>
+                    <option value="">Не выбран</option>
+                    {bays?.data?.map((b) => (
+                      <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">Приёмщик</label>
+                  <select value={advisorId} onChange={(e) => setAdvisorId(e.target.value)} className={inputCls}>
+                    <option value="">Не назначен</option>
+                    {advisors?.data?.map((a) => (
+                      <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">Заметки</label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Причина обращения..."
+                    className={inputCls}
+                  />
+                </div>
+
+                {error && <p className="text-sm text-red-600">{error}</p>}
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {saving ? '...' : 'Сохранить'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="rounded-lg bg-gray-50 p-3 space-y-1">
+                  <div className="text-xs text-gray-500">
+                    <span className="font-medium text-gray-700">{date}</span>{' '}
+                    {startTime} – {endTime}
+                  </div>
+                  {appointment.serviceBay && (
+                    <div className="text-xs text-gray-500">Пост: <span className="font-medium text-gray-700">{appointment.serviceBay.name}</span></div>
+                  )}
+                  {appointment.advisor && (
+                    <div className="text-xs text-gray-500">Приёмщик: <span className="font-medium text-gray-700">{appointment.advisor.firstName} {appointment.advisor.lastName}</span></div>
+                  )}
+                  {appointment.notes && (
+                    <div className="text-xs text-gray-500">Заметки: {appointment.notes}</div>
+                  )}
+                  {appointment.source && (
+                    <div className="text-xs text-gray-500">Источник: {appointment.source}</div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="py-8 text-center text-red-500">Не удалось загрузить данные</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Work Order Detail Modal ---
+
+interface WorkOrderDetail {
+  id: string;
+  orderNumber: string;
+  status: string;
+  clientComplaints: string | null;
+  diagnosticNotes: string | null;
+  totalLabor: string | number;
+  totalParts: string | number;
+  totalAmount: string | number;
+  createdAt: string;
+  client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null };
+  advisor: { id: string; firstName: string; lastName: string } | null;
+  mechanic: { id: string; firstName: string; lastName: string } | null;
+  serviceBay: { id: string; name: string; type: string | null } | null;
+  items: {
+    id: string;
+    type: string;
+    description: string;
+    quantity: number;
+    unitPrice: string | number;
+    totalPrice: string | number;
+    normHours: number | null;
+  }[];
+  workLogs: {
+    id: string;
+    description: string;
+    hoursWorked: number;
+    logDate: string;
+    mechanic: { id: string; firstName: string; lastName: string } | null;
+  }[];
+}
+
+function WorkOrderDetailModal({
+  workOrderId,
+  onClose,
+  onUpdate,
+}: {
+  workOrderId: string;
+  onClose: () => void;
+  onUpdate: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const { data: wo, isLoading, refetch: refetchWo } = useQuery<WorkOrderDetail>({
+    queryKey: ['work-order-detail', workOrderId],
+    queryFn: () => apiFetch(`/work-orders/${workOrderId}`),
+    staleTime: 0,
+  });
+
+  const { data: mechanics } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
+    queryKey: ['mechanics-modal'],
+    queryFn: () => apiFetch('/users?limit=50&role=MECHANIC'),
+  });
+
+  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
+    queryKey: ['bays-modal'],
+    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
+  });
+
+  const [complaints, setComplaints] = useState('');
+  const [diagNotes, setDiagNotes] = useState('');
+  const [mechanicId, setMechanicId] = useState('');
+  const [serviceBayId, setServiceBayId] = useState('');
+  const [initialized, setInitialized] = useState(false);
+
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [itemType, setItemType] = useState<'LABOR' | 'PART'>('LABOR');
+  const [itemDesc, setItemDesc] = useState('');
+  const [itemQty, setItemQty] = useState('1');
+  const [itemPrice, setItemPrice] = useState('');
+
+  if (wo && !initialized) {
+    setComplaints(wo.clientComplaints || '');
+    setDiagNotes(wo.diagnosticNotes || '');
+    setMechanicId(wo.mechanic?.id || '');
+    setServiceBayId(wo.serviceBay?.id || '');
+    setInitialized(true);
+  }
+
+  const next = wo ? WO_NEXT_STATUS[wo.status] : null;
+  const isEditable = wo && !['CLOSED', 'CANCELLED'].includes(wo.status);
+
+  async function handleSave() {
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`/work-orders/${workOrderId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          clientComplaints: complaints || null,
+          diagnosticNotes: diagNotes || null,
+          mechanicId: mechanicId || null,
+          serviceBayId: serviceBayId || null,
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+      onUpdate();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка сохранения');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleNextStatus() {
+    if (!next) return;
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: next.status }),
+      });
+      onUpdate();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка');
+      refetchWo();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAddItem() {
+    if (!itemDesc || !itemPrice) return;
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items`, {
+        method: 'POST',
+        body: JSON.stringify({
+          type: itemType,
+          description: itemDesc,
+          quantity: Number(itemQty) || 1,
+          unitPrice: Number(itemPrice),
+        }),
+      });
+      setItemDesc('');
+      setItemQty('1');
+      setItemPrice('');
+      setShowAddItem(false);
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка добавления');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteItem(itemId: string) {
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items/${itemId}`, { method: 'DELETE' });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка удаления');
+    }
+  }
+
+  const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold text-gray-900">{wo?.orderNumber || '...'}</h2>
+            {wo && (
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CARD_BADGE_COLORS[wo.status] || 'bg-gray-100'}`}>
+                {STATUS_LABELS[wo.status]}
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        {isLoading ? (
+          <div className="py-8 text-center text-gray-500">Загрузка...</div>
+        ) : wo ? (
+          <div className="mt-4 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs font-medium text-gray-500">Клиент</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  {wo.client.firstName} {wo.client.lastName}
+                </p>
+                {wo.client.phone && <p className="text-xs text-gray-600">{wo.client.phone}</p>}
+              </div>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs font-medium text-gray-500">Автомобиль</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  {wo.vehicle.make} {wo.vehicle.model}
+                  {wo.vehicle.year ? ` (${wo.vehicle.year})` : ''}
+                </p>
+                {wo.vehicle.licensePlate && <p className="text-xs text-gray-600">{wo.vehicle.licensePlate}</p>}
+                {wo.vehicle.vin && <p className="text-xs text-gray-400 font-mono">{wo.vehicle.vin}</p>}
+              </div>
+            </div>
+
+            {isEditable && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">Жалобы клиента</label>
+                  <textarea value={complaints} onChange={(e) => setComplaints(e.target.value)} rows={2} placeholder="Что беспокоит клиента..." className={inputCls} />
+                </div>
+
+                {['DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED', 'COMPLETED'].includes(wo.status) && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Заметки диагностики</label>
+                    <textarea value={diagNotes} onChange={(e) => setDiagNotes(e.target.value)} rows={2} placeholder="Результаты диагностики..." className={inputCls} />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Механик</label>
+                    <select value={mechanicId} onChange={(e) => setMechanicId(e.target.value)} className={inputCls}>
+                      <option value="">Не назначен</option>
+                      {mechanics?.data?.map((m) => (
+                        <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Рабочий пост</label>
+                    <select value={serviceBayId} onChange={(e) => setServiceBayId(e.target.value)} className={inputCls}>
+                      <option value="">Не выбран</option>
+                      {bays?.data?.map((b) => (
+                        <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {!isEditable && wo.clientComplaints && (
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs font-medium text-gray-500">Жалобы клиента</p>
+                <p className="text-sm text-gray-700">{wo.clientComplaints}</p>
+              </div>
+            )}
+
+            {!isEditable && wo.diagnosticNotes && (
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="text-xs font-medium text-gray-500">Диагностика</p>
+                <p className="text-sm text-gray-700">{wo.diagnosticNotes}</p>
+              </div>
+            )}
+
+            <div>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-gray-600">Работы и запчасти</p>
+                {isEditable && (
+                  <button onClick={() => setShowAddItem(!showAddItem)} className="text-xs font-medium text-primary-600 hover:text-primary-700">
+                    {showAddItem ? 'Отмена' : '+ Добавить'}
+                  </button>
+                )}
+              </div>
+
+              {showAddItem && (
+                <div className="mt-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select value={itemType} onChange={(e) => setItemType(e.target.value as 'LABOR' | 'PART')} className={inputCls}>
+                      <option value="LABOR">Работа</option>
+                      <option value="PART">Запчасть</option>
+                    </select>
+                    <input placeholder="Кол-во" type="number" min={1} value={itemQty} onChange={(e) => setItemQty(e.target.value)} className={inputCls} />
+                  </div>
+                  <input placeholder="Описание *" value={itemDesc} onChange={(e) => setItemDesc(e.target.value)} className={inputCls} />
+                  <input placeholder="Цена за ед. *" type="number" min={0} step={0.01} value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} className={inputCls} />
+                  <button onClick={handleAddItem} disabled={saving || !itemDesc || !itemPrice} className="w-full rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+                    Добавить
+                  </button>
+                </div>
+              )}
+
+              {wo.items.length > 0 ? (
+                <div className="mt-2 space-y-1">
+                  {wo.items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-xs">
+                      <div className="flex-1">
+                        <span className={`mr-1.5 rounded px-1 py-0.5 text-[10px] font-medium ${item.type === 'LABOR' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {item.type === 'LABOR' ? 'Работа' : 'Запчасть'}
+                        </span>
+                        <span className="text-gray-700">{item.description}</span>
+                        <span className="ml-1 text-gray-400">{item.quantity} x {formatMoney(item.unitPrice)}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-700">{formatMoney(item.totalPrice)}</span>
+                        {isEditable && (
+                          <button onClick={() => handleDeleteItem(item.id)} className="text-red-400 hover:text-red-600" title="Удалить">&times;</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-gray-400">Нет позиций</p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-4 rounded-lg bg-gray-50 px-4 py-2">
+              <div className="text-xs text-gray-500">Работы: <span className="font-semibold text-gray-700">{formatMoney(wo.totalLabor)}</span></div>
+              <div className="text-xs text-gray-500">Запчасти: <span className="font-semibold text-gray-700">{formatMoney(wo.totalParts)}</span></div>
+              <div className="text-sm font-bold text-gray-900">Итого: {formatMoney(wo.totalAmount)}</div>
+            </div>
+
+            {wo.workLogs.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-gray-600">Журнал работ</p>
+                <div className="mt-1 space-y-1">
+                  {wo.workLogs.map((log) => (
+                    <div key={log.id} className="rounded bg-gray-50 px-3 py-1.5 text-xs text-gray-600">
+                      <span className="font-medium text-gray-700">{formatShortDate(log.logDate)}</span>
+                      {' — '}{log.description}
+                      {log.mechanic && <span className="ml-1 text-gray-400">({log.mechanic.firstName} {log.mechanic.lastName})</span>}
+                      <span className="ml-1 text-gray-400">{log.hoursWorked}ч</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {error && <p className="text-sm text-red-600">{error}</p>}
+
+            <div className="flex gap-2 pt-2">
+              {isEditable && (
+                <button onClick={handleSave} disabled={saving} className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                  {saving ? '...' : 'Сохранить'}
+                </button>
+              )}
+              {next && (
+                <button onClick={handleNextStatus} disabled={saving} className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
+                  {saving ? '...' : next.label}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="py-8 text-center text-red-500">Не удалось загрузить данные</div>
+        )}
       </div>
     </div>
   );
