@@ -138,7 +138,8 @@ export default function DashboardPage() {
   const { data: funnelData, isLoading: funnelLoading } = useQuery<FunnelData>({
     queryKey: ['client-funnel'],
     queryFn: () => apiFetch('/dashboard/funnel'),
-    refetchInterval: 30000,
+    refetchInterval: 15000,
+    staleTime: 0,
   });
 
   function invalidateFunnel() {

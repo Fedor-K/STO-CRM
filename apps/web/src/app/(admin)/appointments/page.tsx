@@ -92,7 +92,11 @@ export default function AppointmentsPage() {
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       apiFetch(`/appointments/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['appointments'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['client-funnel'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -100,6 +104,8 @@ export default function AppointmentsPage() {
     onSuccess: () => {
       setActionError('');
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['client-funnel'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
     },
     onError: (err: any) => {
       setActionError(err.message || 'Ошибка удаления записи');
@@ -255,6 +261,8 @@ export default function AppointmentsPage() {
           onSuccess={() => {
             setShowModal(false);
             queryClient.invalidateQueries({ queryKey: ['appointments'] });
+            queryClient.invalidateQueries({ queryKey: ['client-funnel'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
           }}
         />
       )}
