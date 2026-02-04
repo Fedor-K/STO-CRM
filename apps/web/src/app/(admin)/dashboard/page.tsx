@@ -82,7 +82,6 @@ const FUNNEL_COLUMNS = [
   { key: 'appeal', label: 'Обращение', color: 'border-slate-400', badge: 'bg-slate-200 text-slate-700', type: 'appointment' as const },
   { key: 'estimating', label: 'Согласование', color: 'border-amber-400', badge: 'bg-amber-200 text-amber-700', type: 'appointment' as const },
   { key: 'scheduled', label: 'Записан', color: 'border-sky-400', badge: 'bg-sky-200 text-sky-700', type: 'appointment' as const },
-  { key: 'intake', label: 'Приёмка', color: 'border-blue-400', badge: 'bg-blue-200 text-blue-700', type: 'workorder' as const },
   { key: 'diagnosis', label: 'Диагностика', color: 'border-indigo-400', badge: 'bg-indigo-200 text-indigo-700', type: 'workorder' as const },
   { key: 'approval', label: 'Согласование', color: 'border-violet-400', badge: 'bg-violet-200 text-violet-700', type: 'workorder' as const },
   { key: 'inProgress', label: 'В работе', color: 'border-yellow-400', badge: 'bg-yellow-200 text-yellow-700', type: 'workorder' as const },

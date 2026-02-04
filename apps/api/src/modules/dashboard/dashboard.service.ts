@@ -80,7 +80,6 @@ export class DashboardService {
       pendingAppointments,
       estimatingAppointments,
       confirmedAppointments,
-      newOrders,
       diagnosedOrders,
       approvedOrders,
       inProgressOrders,
@@ -108,16 +107,9 @@ export class DashboardService {
         orderBy: { scheduledStart: 'asc' },
       }),
 
-      // Приёмка — ЗН со статусом NEW
+      // Диагностика — ЗН со статусом NEW или DIAGNOSED
       this.prisma.workOrder.findMany({
-        where: { tenantId, status: 'NEW' },
-        include: workOrderFunnelInclude,
-        orderBy: { createdAt: 'asc' },
-      }),
-
-      // Диагностика — ЗН со статусом DIAGNOSED
-      this.prisma.workOrder.findMany({
-        where: { tenantId, status: 'DIAGNOSED' },
+        where: { tenantId, status: { in: ['NEW', 'DIAGNOSED'] } },
         include: workOrderFunnelInclude,
         orderBy: { createdAt: 'asc' },
       }),
@@ -156,7 +148,6 @@ export class DashboardService {
       appeal: pendingAppointments,
       estimating: estimatingAppointments,
       scheduled: confirmedAppointments,
-      intake: newOrders,
       diagnosis: diagnosedOrders,
       approval: approvedOrders,
       inProgress: inProgressOrders,

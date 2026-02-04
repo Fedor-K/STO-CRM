@@ -243,7 +243,7 @@ export class WorkOrdersService {
       const wo = await tx.workOrder.create({
         data: {
           orderNumber: formatWONumber(nextSeq),
-          status: 'NEW',
+          status: 'DIAGNOSED',
           tenantId,
           clientId: appointment.clientId,
           vehicleId: appointment.vehicleId,
