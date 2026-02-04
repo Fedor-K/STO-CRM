@@ -109,8 +109,8 @@ const FUNNEL_COLUMNS = [
 
 function formatMoney(amount: number | string): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (!num) return '0 ₽';
-  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
+  if (!num) return '0,00 ₽';
+  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
 }
 
 function formatDate(dateStr: string): string {
@@ -1235,17 +1235,27 @@ function WorkOrderDetailModal({
     queryFn: () => apiFetch('/users?limit=50&role=MECHANIC'),
   });
 
+  const { data: services } = useQuery<{ data: { id: string; name: string; price: string | number; normHours: string | number | null }[] }>({
+    queryKey: ['services-catalog'],
+    queryFn: () => apiFetch('/services?limit=200&sort=name&order=asc'),
+  });
+
+  const { data: parts } = useQuery<{ data: { id: string; name: string; sellPrice: string | number; brand: string | null }[] }>({
+    queryKey: ['parts-catalog'],
+    queryFn: () => apiFetch('/parts?limit=200&sort=name&order=asc'),
+  });
+
   const [complaints, setComplaints] = useState('');
   const [checklist, setChecklist] = useState<InspectionChecklist>(createEmptyChecklist());
   const [mechanicId, setMechanicId] = useState('');
   const [initialized, setInitialized] = useState(false);
 
-  // New item form
+  // Add item
   const [showAddItem, setShowAddItem] = useState(false);
-  const [itemType, setItemType] = useState<'LABOR' | 'PART'>('LABOR');
-  const [itemDesc, setItemDesc] = useState('');
-  const [itemQty, setItemQty] = useState('1');
-  const [itemPrice, setItemPrice] = useState('');
+  const [addItemTab, setAddItemTab] = useState<'LABOR' | 'PART'>('LABOR');
+  const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [selectedPartId, setSelectedPartId] = useState('');
+  const [partQty, setPartQty] = useState('1');
 
   if (wo && !initialized) {
     setComplaints(wo.clientComplaints || '');
@@ -1298,23 +1308,52 @@ function WorkOrderDetailModal({
     }
   }
 
-  async function handleAddItem() {
-    if (!itemDesc || !itemPrice) return;
+  async function handleAddLabor() {
+    const svc = services?.data?.find((s) => s.id === selectedServiceId);
+    if (!svc) return;
+    setSaving(true);
+    setError('');
+    try {
+      const normHours = svc.normHours ? Number(svc.normHours) : 1;
+      await apiFetch(`/work-orders/${workOrderId}/items`, {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'LABOR',
+          description: svc.name,
+          quantity: normHours,
+          unitPrice: 2000,
+          normHours,
+          serviceId: svc.id,
+        }),
+      });
+      setSelectedServiceId('');
+      setShowAddItem(false);
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка добавления');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAddPart() {
+    const part = parts?.data?.find((p) => p.id === selectedPartId);
+    if (!part) return;
     setSaving(true);
     setError('');
     try {
       await apiFetch(`/work-orders/${workOrderId}/items`, {
         method: 'POST',
         body: JSON.stringify({
-          type: itemType,
-          description: itemDesc,
-          quantity: Number(itemQty) || 1,
-          unitPrice: Number(itemPrice),
+          type: 'PART',
+          description: part.name,
+          quantity: Number(partQty) || 1,
+          unitPrice: Number(part.sellPrice),
+          partId: part.id,
         }),
       });
-      setItemDesc('');
-      setItemQty('1');
-      setItemPrice('');
+      setSelectedPartId('');
+      setPartQty('1');
       setShowAddItem(false);
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
     } catch (err: any) {
@@ -1330,6 +1369,18 @@ function WorkOrderDetailModal({
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
     } catch (err: any) {
       setError(err.message || 'Ошибка удаления');
+    }
+  }
+
+  async function handleUpdateItem(itemId: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) {
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items/${itemId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка обновления');
     }
   }
 
@@ -1407,106 +1458,31 @@ function WorkOrderDetailModal({
               </>
             )}
 
-            {/* Items (services + parts) */}
-            <div>
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-gray-600">Работы и запчасти</p>
-                {isEditable && (
-                  <button
-                    onClick={() => setShowAddItem(!showAddItem)}
-                    className="text-xs font-medium text-primary-600 hover:text-primary-700"
-                  >
-                    {showAddItem ? 'Отмена' : '+ Добавить'}
-                  </button>
-                )}
-              </div>
-
-              {showAddItem && (
-                <div className="mt-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <select value={itemType} onChange={(e) => setItemType(e.target.value as 'LABOR' | 'PART')} className={inputCls}>
-                      <option value="LABOR">Работа</option>
-                      <option value="PART">Запчасть</option>
-                    </select>
-                    <input
-                      placeholder="Кол-во"
-                      type="number"
-                      min={1}
-                      value={itemQty}
-                      onChange={(e) => setItemQty(e.target.value)}
-                      className={inputCls}
-                    />
-                  </div>
-                  <input
-                    placeholder="Описание *"
-                    value={itemDesc}
-                    onChange={(e) => setItemDesc(e.target.value)}
-                    className={inputCls}
-                  />
-                  <input
-                    placeholder="Цена за ед. *"
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={itemPrice}
-                    onChange={(e) => setItemPrice(e.target.value)}
-                    className={inputCls}
-                  />
-                  <button
-                    onClick={handleAddItem}
-                    disabled={saving || !itemDesc || !itemPrice}
-                    className="w-full rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-                  >
-                    Добавить
-                  </button>
-                </div>
-              )}
-
-              {wo.items.length > 0 ? (
-                <div className="mt-2 space-y-1">
-                  {wo.items.map((item) => (
-                    <div key={item.id} className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-xs">
-                      <div className="flex-1">
-                        <span className={`mr-1.5 rounded px-1 py-0.5 text-[10px] font-medium ${item.type === 'LABOR' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                          {item.type === 'LABOR' ? 'Работа' : 'Запчасть'}
-                        </span>
-                        <span className="text-gray-700">{item.description}</span>
-                        <span className="ml-1 text-gray-400">
-                          {item.quantity} x {formatMoney(item.unitPrice)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-700">{formatMoney(item.totalPrice)}</span>
-                        {isEditable && (
-                          <button
-                            onClick={() => handleDeleteItem(item.id)}
-                            className="text-red-400 hover:text-red-600"
-                            title="Удалить"
-                          >
-                            &times;
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-2 text-xs text-gray-400">Нет позиций</p>
-              )}
-            </div>
-
-            {/* Totals */}
-            <div className="flex justify-end gap-4 rounded-lg bg-gray-50 px-4 py-2">
-              <div className="text-xs text-gray-500">
-                Работы: <span className="font-semibold text-gray-700">{formatMoney(wo.totalLabor)}</span>
-              </div>
-              <div className="text-xs text-gray-500">
-                Запчасти: <span className="font-semibold text-gray-700">{formatMoney(wo.totalParts)}</span>
-              </div>
-              <div className="text-sm font-bold text-gray-900">
-                Итого: {formatMoney(wo.totalAmount)}
-              </div>
-            </div>
+            {/* Items — collapsible with tabs */}
+            <ItemsSection
+              items={wo.items}
+              totalLabor={wo.totalLabor}
+              totalParts={wo.totalParts}
+              totalAmount={wo.totalAmount}
+              isEditable={!!isEditable}
+              showAddItem={showAddItem}
+              setShowAddItem={setShowAddItem}
+              addItemTab={addItemTab}
+              setAddItemTab={setAddItemTab}
+              services={services?.data || []}
+              parts={parts?.data || []}
+              selectedServiceId={selectedServiceId}
+              setSelectedServiceId={setSelectedServiceId}
+              selectedPartId={selectedPartId}
+              setSelectedPartId={setSelectedPartId}
+              partQty={partQty}
+              setPartQty={setPartQty}
+              saving={saving}
+              onAddLabor={handleAddLabor}
+              onAddPart={handleAddPart}
+              onDeleteItem={handleDeleteItem}
+              onUpdateItem={handleUpdateItem}
+            />
 
             {/* Work logs */}
             {wo.workLogs.length > 0 && (
@@ -1560,6 +1536,165 @@ function WorkOrderDetailModal({
 }
 
 // --- Inspection Checklist Components ---
+
+// --- Editable table rows ---
+
+type ItemRow = { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null };
+
+function EditableLaborRow({
+  item,
+  isEditable,
+  onUpdate,
+  onDelete,
+}: {
+  item: ItemRow;
+  isEditable: boolean;
+  onUpdate: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [price, setPrice] = useState(Number(item.unitPrice));
+  const [norm, setNorm] = useState(item.normHours ?? Number(item.quantity));
+  const [total, setTotal] = useState(Number(item.totalPrice));
+
+  const editCls = 'w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-gray-300 focus:border-primary-400 focus:bg-white focus:outline-none';
+
+  function changePrice(val: string) {
+    const p = Number(val);
+    if (isNaN(p)) return;
+    setPrice(p);
+    setTotal(Math.round(p * norm * 100) / 100);
+  }
+
+  function changeNorm(val: string) {
+    const n = Number(val);
+    if (isNaN(n)) return;
+    setNorm(n);
+    setTotal(Math.round(price * n * 100) / 100);
+  }
+
+  function changeTotal(val: string) {
+    const t = Number(val);
+    if (isNaN(t)) return;
+    setTotal(t);
+    if (price > 0) {
+      setNorm(Math.round((t / price) * 100) / 100);
+    }
+  }
+
+  function save() {
+    const origPrice = Number(item.unitPrice);
+    const origNorm = item.normHours ?? Number(item.quantity);
+    if (price === origPrice && norm === origNorm) return;
+    onUpdate(item.id, { unitPrice: price, quantity: norm, normHours: norm });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+  }
+
+  if (!isEditable) {
+    return (
+      <tr className="border-b border-gray-50">
+        <td className="py-1.5 text-gray-700">{item.description}</td>
+        <td className="py-1.5 text-right text-gray-600">{formatMoney(item.unitPrice)}</td>
+        <td className="py-1.5 text-right text-gray-600">{item.normHours ?? Number(item.quantity)}</td>
+        <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.totalPrice)}</td>
+        <td className="py-1.5 text-right text-gray-400">{formatVat(item.totalPrice)}</td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr className="border-b border-gray-50">
+      <td className="py-1.5 text-gray-700">{item.description}</td>
+      <td className="py-1.5 text-right">
+        <input type="number" value={price} onChange={(e) => changePrice(e.target.value)} onBlur={save} onKeyDown={handleKeyDown} min={0} step={100} className={editCls} />
+      </td>
+      <td className="py-1.5 text-right">
+        <input type="number" value={norm} onChange={(e) => changeNorm(e.target.value)} onBlur={save} onKeyDown={handleKeyDown} min={0.01} step={0.1} className={editCls} />
+      </td>
+      <td className="py-1.5 text-right">
+        <input type="number" value={total} onChange={(e) => changeTotal(e.target.value)} onBlur={save} onKeyDown={handleKeyDown} min={0} step={100} className={`${editCls} font-medium`} />
+      </td>
+      <td className="py-1.5 text-right text-gray-400">{formatVat(total)}</td>
+      <td className="py-1.5 text-right">
+        <button onClick={() => onDelete(item.id)} className="text-red-400 hover:text-red-600">&times;</button>
+      </td>
+    </tr>
+  );
+}
+
+function EditablePartRow({
+  item,
+  isEditable,
+  onUpdate,
+  onDelete,
+}: {
+  item: ItemRow;
+  isEditable: boolean;
+  onUpdate: (id: string, data: { unitPrice?: number; quantity?: number }) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [price, setPrice] = useState(Number(item.unitPrice));
+  const [qty, setQty] = useState(Number(item.quantity));
+  const [total, setTotal] = useState(Number(item.totalPrice));
+
+  const editCls = 'w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-gray-300 focus:border-primary-400 focus:bg-white focus:outline-none';
+
+  function changePrice(val: string) {
+    const p = Number(val);
+    if (isNaN(p)) return;
+    setPrice(p);
+    setTotal(Math.round(p * qty * 100) / 100);
+  }
+
+  function changeQty(val: string) {
+    const q = Number(val);
+    if (isNaN(q)) return;
+    setQty(q);
+    setTotal(Math.round(price * q * 100) / 100);
+  }
+
+  function save() {
+    const origPrice = Number(item.unitPrice);
+    const origQty = Number(item.quantity);
+    if (price === origPrice && qty === origQty) return;
+    onUpdate(item.id, { unitPrice: price, quantity: qty });
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+  }
+
+  if (!isEditable) {
+    return (
+      <tr className="border-b border-gray-50">
+        <td className="py-1.5 text-gray-700">{item.description}</td>
+        <td className="py-1.5 text-right text-gray-600">{formatMoney(item.unitPrice)}</td>
+        <td className="py-1.5 text-right text-gray-600">{Number(item.quantity)}</td>
+        <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.totalPrice)}</td>
+        <td className="py-1.5 text-right text-gray-400">{formatVat(item.totalPrice)}</td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr className="border-b border-gray-50">
+      <td className="py-1.5 text-gray-700">{item.description}</td>
+      <td className="py-1.5 text-right">
+        <input type="number" value={price} onChange={(e) => changePrice(e.target.value)} onBlur={save} onKeyDown={handleKeyDown} min={0} step={1} className={editCls} />
+      </td>
+      <td className="py-1.5 text-right">
+        <input type="number" value={qty} onChange={(e) => changeQty(e.target.value)} onBlur={save} onKeyDown={handleKeyDown} min={1} step={1} className={editCls} />
+      </td>
+      <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(total)}</td>
+      <td className="py-1.5 text-right text-gray-400">{formatVat(total)}</td>
+      <td className="py-1.5 text-right">
+        <button onClick={() => onDelete(item.id)} className="text-red-400 hover:text-red-600">&times;</button>
+      </td>
+    </tr>
+  );
+}
 
 function InspectionChecklistEditor({
   checklist,
@@ -1638,6 +1773,310 @@ function InspectionChecklistEditor({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// --- Items Section (collapsible, tabbed) ---
+
+function formatVat(amount: number | string): string {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (!num) return '0,00 ₽';
+  const vat = num * 22 / 122;
+  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(vat);
+}
+
+function ItemsSection({
+  items,
+  totalLabor,
+  totalParts,
+  totalAmount,
+  isEditable,
+  showAddItem,
+  setShowAddItem,
+  addItemTab,
+  setAddItemTab,
+  services,
+  parts,
+  selectedServiceId,
+  setSelectedServiceId,
+  selectedPartId,
+  setSelectedPartId,
+  partQty,
+  setPartQty,
+  saving,
+  onAddLabor,
+  onAddPart,
+  onDeleteItem,
+  onUpdateItem,
+}: {
+  items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null }[];
+  totalLabor: string | number;
+  totalParts: string | number;
+  totalAmount: string | number;
+  isEditable: boolean;
+  showAddItem: boolean;
+  setShowAddItem: (v: boolean) => void;
+  addItemTab: 'LABOR' | 'PART';
+  setAddItemTab: (v: 'LABOR' | 'PART') => void;
+  services: { id: string; name: string; price: string | number; normHours: string | number | null }[];
+  parts: { id: string; name: string; sellPrice: string | number; brand: string | null }[];
+  selectedServiceId: string;
+  setSelectedServiceId: (v: string) => void;
+  selectedPartId: string;
+  setSelectedPartId: (v: string) => void;
+  partQty: string;
+  setPartQty: (v: string) => void;
+  saving: boolean;
+  onAddLabor: () => void;
+  onAddPart: () => void;
+  onDeleteItem: (id: string) => void;
+  onUpdateItem: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const [activeTab, setActiveTab] = useState<'LABOR' | 'PART'>('LABOR');
+
+  const laborItems = items.filter((i) => i.type === 'LABOR');
+  const partItems = items.filter((i) => i.type === 'PART');
+  const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
+
+  return (
+    <div className="rounded-lg border border-gray-200">
+      {/* Header */}
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-gray-50"
+      >
+        <span className="text-sm font-semibold text-gray-700">
+          Работы и материалы ({items.length})
+        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-gray-900">{formatMoney(totalAmount)}</span>
+          <span className="text-xs text-gray-400">{expanded ? '\u25B2' : '\u25BC'}</span>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-gray-200">
+          {/* Tabs */}
+          <div className="flex border-b border-gray-100">
+            <button
+              type="button"
+              onClick={() => setActiveTab('LABOR')}
+              className={`flex-1 px-3 py-2 text-xs font-medium ${activeTab === 'LABOR' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Работы ({laborItems.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('PART')}
+              className={`flex-1 px-3 py-2 text-xs font-medium ${activeTab === 'PART' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Материалы ({partItems.length})
+            </button>
+          </div>
+
+          {/* Tab content */}
+          <div className="px-3 py-2">
+            {activeTab === 'LABOR' ? (
+              <>
+                {laborItems.length > 0 ? (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-left text-gray-500">
+                        <th className="pb-1 font-medium">Наименование</th>
+                        <th className="pb-1 font-medium text-right w-20">Цена н/ч</th>
+                        <th className="pb-1 font-medium text-right w-16">Норма</th>
+                        <th className="pb-1 font-medium text-right w-20">Всего</th>
+                        <th className="pb-1 font-medium text-right">в т.ч. НДС</th>
+                        {isEditable && <th className="pb-1 w-6"></th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {laborItems.map((item) => (
+                        <EditableLaborRow
+                          key={item.id}
+                          item={item}
+                          isEditable={isEditable}
+                          onUpdate={onUpdateItem}
+                          onDelete={onDeleteItem}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="py-3 text-center text-xs text-gray-400">Нет работ</p>
+                )}
+
+                {/* Add labor */}
+                {isEditable && (
+                  <div className="mt-2">
+                    {showAddItem && addItemTab === 'LABOR' ? (
+                      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
+                        <select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} className={inputCls}>
+                          <option value="">Выберите работу из каталога</option>
+                          {services.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} — {s.normHours ? `${Number(s.normHours)} н/ч` : '—'}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedServiceId && (() => {
+                          const svc = services.find((s) => s.id === selectedServiceId);
+                          if (!svc) return null;
+                          const norm = svc.normHours ? Number(svc.normHours) : 1;
+                          const total = 2000 * norm;
+                          return (
+                            <div className="rounded bg-white px-3 py-2 text-xs text-gray-600 space-y-0.5">
+                              <div className="flex justify-between"><span>Цена н/ч:</span><span className="font-medium">2 000 ₽</span></div>
+                              <div className="flex justify-between"><span>Норма:</span><span className="font-medium">{norm}</span></div>
+                              <div className="flex justify-between"><span>Всего:</span><span className="font-semibold text-gray-900">{formatMoney(total)}</span></div>
+                              <div className="flex justify-between"><span>в т.ч. НДС:</span><span>{formatVat(total)}</span></div>
+                            </div>
+                          );
+                        })()}
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setShowAddItem(false); setSelectedServiceId(''); }}
+                            className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                          >
+                            Отмена
+                          </button>
+                          <button
+                            type="button"
+                            onClick={onAddLabor}
+                            disabled={saving || !selectedServiceId}
+                            className="flex-1 rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                          >
+                            Добавить
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setShowAddItem(true); setAddItemTab('LABOR'); }}
+                        className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                      >
+                        + Добавить работу
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {partItems.length > 0 ? (
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-left text-gray-500">
+                        <th className="pb-1 font-medium">Наименование</th>
+                        <th className="pb-1 font-medium text-right w-20">Цена</th>
+                        <th className="pb-1 font-medium text-right w-16">Кол-во</th>
+                        <th className="pb-1 font-medium text-right w-20">Всего</th>
+                        <th className="pb-1 font-medium text-right">в т.ч. НДС</th>
+                        {isEditable && <th className="pb-1 w-6"></th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {partItems.map((item) => (
+                        <EditablePartRow
+                          key={item.id}
+                          item={item}
+                          isEditable={isEditable}
+                          onUpdate={onUpdateItem}
+                          onDelete={onDeleteItem}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="py-3 text-center text-xs text-gray-400">Нет материалов</p>
+                )}
+
+                {/* Add part */}
+                {isEditable && (
+                  <div className="mt-2">
+                    {showAddItem && addItemTab === 'PART' ? (
+                      <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
+                        <select value={selectedPartId} onChange={(e) => setSelectedPartId(e.target.value)} className={inputCls}>
+                          <option value="">Выберите материал из каталога</option>
+                          {parts.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}{p.brand ? ` (${p.brand})` : ''} — {formatMoney(p.sellPrice)}
+                            </option>
+                          ))}
+                        </select>
+                        <input
+                          type="number"
+                          min={1}
+                          value={partQty}
+                          onChange={(e) => setPartQty(e.target.value)}
+                          placeholder="Кол-во"
+                          className={inputCls}
+                        />
+                        {selectedPartId && (() => {
+                          const p = parts.find((x) => x.id === selectedPartId);
+                          if (!p) return null;
+                          const total = Number(p.sellPrice) * (Number(partQty) || 1);
+                          return (
+                            <div className="rounded bg-white px-3 py-2 text-xs text-gray-600 space-y-0.5">
+                              <div className="flex justify-between"><span>Цена:</span><span className="font-medium">{formatMoney(p.sellPrice)}</span></div>
+                              <div className="flex justify-between"><span>Кол-во:</span><span className="font-medium">{Number(partQty) || 1}</span></div>
+                              <div className="flex justify-between"><span>Всего:</span><span className="font-semibold text-gray-900">{formatMoney(total)}</span></div>
+                              <div className="flex justify-between"><span>в т.ч. НДС:</span><span>{formatVat(total)}</span></div>
+                            </div>
+                          );
+                        })()}
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => { setShowAddItem(false); setSelectedPartId(''); setPartQty('1'); }}
+                            className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                          >
+                            Отмена
+                          </button>
+                          <button
+                            type="button"
+                            onClick={onAddPart}
+                            disabled={saving || !selectedPartId}
+                            className="flex-1 rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                          >
+                            Добавить
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setShowAddItem(true); setAddItemTab('PART'); }}
+                        className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                      >
+                        + Добавить материал
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Footer totals */}
+          <div className="flex justify-end gap-4 border-t border-gray-100 px-4 py-2">
+            <div className="text-xs text-gray-500">
+              Работы: <span className="font-semibold text-gray-700">{formatMoney(totalLabor)}</span>
+            </div>
+            <div className="text-xs text-gray-500">
+              Материалы: <span className="font-semibold text-gray-700">{formatMoney(totalParts)}</span>
+            </div>
+            <div className="text-sm font-bold text-gray-900">
+              Итого: {formatMoney(totalAmount)}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
