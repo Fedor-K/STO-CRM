@@ -151,10 +151,14 @@ export class AppointmentsService {
     id: string,
     status: AppointmentStatus,
   ): Promise<any> {
-    await this.findById(tenantId, id);
+    const existing = await this.findById(tenantId, id);
+    const data: any = { status };
+    if (status === 'CANCELLED') {
+      data.cancelledFrom = existing.status;
+    }
     return this.prisma.appointment.update({
       where: { id },
-      data: { status },
+      data,
       include: appointmentInclude,
     });
   }

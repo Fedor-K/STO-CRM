@@ -85,6 +85,7 @@ export class DashboardService {
       inProgressOrders,
       readyOrders,
       closedOrders,
+      cancelledAppointments,
     ] = await Promise.all([
       // Обращение — записи со статусом PENDING
       this.prisma.appointment.findMany({
@@ -142,6 +143,14 @@ export class DashboardService {
         orderBy: { updatedAt: 'desc' },
         take: 50,
       }),
+
+      // Отказы — записи со статусом CANCELLED
+      this.prisma.appointment.findMany({
+        where: { tenantId, status: 'CANCELLED' },
+        include: appointmentFunnelInclude,
+        orderBy: { updatedAt: 'desc' },
+        take: 50,
+      }),
     ]);
 
     return {
@@ -153,6 +162,11 @@ export class DashboardService {
       inProgress: inProgressOrders,
       ready: readyOrders,
       delivered: closedOrders,
+      cancelledByStage: {
+        appeal: cancelledAppointments.filter((a: any) => a.cancelledFrom === 'PENDING' || (!a.cancelledFrom)),
+        estimating: cancelledAppointments.filter((a: any) => a.cancelledFrom === 'ESTIMATING'),
+        scheduled: cancelledAppointments.filter((a: any) => a.cancelledFrom === 'CONFIRMED'),
+      },
     };
   }
 }

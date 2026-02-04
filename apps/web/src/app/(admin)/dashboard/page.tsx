@@ -38,15 +38,26 @@ interface WorkOrderCard {
   _count: { items: number };
 }
 
+interface CancelledAppointment extends AppointmentCard {
+  cancelReason: string | null;
+  cancelComment: string | null;
+  createdAt: string;
+}
+
 interface FunnelData {
   appeal: AppointmentCard[];
+  estimating: AppointmentCard[];
   scheduled: AppointmentCard[];
-  intake: WorkOrderCard[];
   diagnosis: WorkOrderCard[];
   approval: WorkOrderCard[];
   inProgress: WorkOrderCard[];
   ready: WorkOrderCard[];
   delivered: WorkOrderCard[];
+  cancelledByStage: {
+    appeal: CancelledAppointment[];
+    estimating: CancelledAppointment[];
+    scheduled: CancelledAppointment[];
+  };
 }
 
 // --- Constants ---
@@ -199,6 +210,9 @@ export default function DashboardPage() {
           <div className="mt-3 flex gap-3 overflow-x-auto pb-4">
             {FUNNEL_COLUMNS.map((col) => {
               const items = (funnelData?.[col.key as keyof FunnelData] || []) as any[];
+              const cancelledItems = col.type === 'appointment'
+                ? (funnelData?.cancelledByStage as any)?.[col.key] || []
+                : [];
               return (
                 <div
                   key={col.key}
@@ -234,6 +248,10 @@ export default function DashboardPage() {
                       <div className="py-4 text-center text-xs text-gray-400">Пусто</div>
                     )}
                   </div>
+                  {/* Cancelled section per column */}
+                  {cancelledItems.length > 0 && (
+                    <CancelledColumnSection cancelled={cancelledItems} />
+                  )}
                 </div>
               );
             })}
@@ -278,6 +296,51 @@ export default function DashboardPage() {
 }
 
 // --- Components ---
+
+function CancelledColumnSection({ cancelled }: { cancelled: CancelledAppointment[] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border-t border-red-100 bg-red-50/50">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between px-3 py-1.5"
+      >
+        <span className="text-[11px] font-medium text-red-600">
+          Отказы
+        </span>
+        <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+          {cancelled.length}
+        </span>
+      </button>
+      {expanded && (
+        <div className="space-y-1.5 px-2 pb-2">
+          {cancelled.map((a) => (
+            <div key={a.id} className="rounded border border-red-200 bg-white px-2 py-1.5">
+              <p className="text-[11px] font-medium text-gray-800">
+                {a.client.firstName} {a.client.lastName}
+              </p>
+              <p className="text-[10px] text-gray-500">
+                {a.vehicle.make} {a.vehicle.model}
+              </p>
+              <div className="mt-1 flex items-center justify-between">
+                <span className="rounded bg-red-50 px-1 py-0.5 text-[10px] font-medium text-red-700">
+                  {a.cancelReason || a.notes || '—'}
+                </span>
+                <span className="text-[10px] text-gray-400">
+                  {new Date(a.createdAt).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}
+                </span>
+              </div>
+              {a.cancelComment && (
+                <p className="mt-0.5 text-[10px] text-gray-400 italic">{a.cancelComment}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function StatCard({ title, value, subtitle }: { title: string; value: string; subtitle: string }) {
   return (
