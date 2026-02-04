@@ -10,6 +10,7 @@ export const ru = {
 
   appointmentStatus: {
     PENDING: 'Ожидает подтверждения',
+    ESTIMATING: 'На согласовании',
     CONFIRMED: 'Подтверждена',
     IN_PROGRESS: 'В процессе',
     COMPLETED: 'Завершена',

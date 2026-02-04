@@ -170,6 +170,8 @@ export class AppointmentsService {
       source?: string;
       adChannel?: string;
       notes?: string;
+      cancelReason?: string;
+      cancelComment?: string;
       status?: AppointmentStatus;
     },
   ): Promise<any> {

@@ -20,6 +20,7 @@ enum UserRole {
 
 enum AppointmentStatus {
   PENDING
+  ESTIMATING
   CONFIRMED
   IN_PROGRESS
   COMPLETED
@@ -258,6 +259,8 @@ model Appointment {
   source         String?
   adChannel      String?
   notes          String?
+  cancelReason   String?
+  cancelComment  String?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 

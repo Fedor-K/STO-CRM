@@ -38,6 +38,7 @@ const STATUS_BG: Record<string, string> = {
 
 const STATUS_BLOCK: Record<string, string> = {
   PENDING: 'bg-yellow-100 border-yellow-400 text-yellow-900',
+  ESTIMATING: 'bg-amber-100 border-amber-400 text-amber-900',
   CONFIRMED: 'bg-blue-100 border-blue-400 text-blue-900',
   IN_PROGRESS: 'bg-green-100 border-green-400 text-green-900',
   COMPLETED: 'bg-gray-100 border-gray-300 text-gray-600',
@@ -46,7 +47,8 @@ const STATUS_BLOCK: Record<string, string> = {
 };
 
 const APPOINTMENT_TRANSITIONS: Record<string, string[]> = {
-  PENDING: ['CONFIRMED', 'CANCELLED', 'NO_SHOW'],
+  PENDING: ['ESTIMATING', 'CONFIRMED', 'CANCELLED', 'NO_SHOW'],
+  ESTIMATING: ['CONFIRMED', 'CANCELLED', 'NO_SHOW'],
   CONFIRMED: ['CANCELLED', 'NO_SHOW'],
   IN_PROGRESS: ['COMPLETED', 'CANCELLED'],
   COMPLETED: [],

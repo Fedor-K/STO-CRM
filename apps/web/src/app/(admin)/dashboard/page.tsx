@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
+import { useAuth } from '@/providers/auth-provider';
 import Link from 'next/link';
 
 // --- Types ---
@@ -51,6 +52,9 @@ interface FunnelData {
 // --- Constants ---
 
 const STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Обращение',
+  ESTIMATING: 'На согласовании',
+  CONFIRMED: 'Записан',
   NEW: 'Новый',
   DIAGNOSED: 'Диагностика',
   APPROVED: 'Согласован',
@@ -76,6 +80,7 @@ const CARD_BADGE_COLORS: Record<string, string> = {
 
 const FUNNEL_COLUMNS = [
   { key: 'appeal', label: 'Обращение', color: 'border-slate-400', badge: 'bg-slate-200 text-slate-700', type: 'appointment' as const },
+  { key: 'estimating', label: 'Согласование', color: 'border-amber-400', badge: 'bg-amber-200 text-amber-700', type: 'appointment' as const },
   { key: 'scheduled', label: 'Записан', color: 'border-sky-400', badge: 'bg-sky-200 text-sky-700', type: 'appointment' as const },
   { key: 'intake', label: 'Приёмка', color: 'border-blue-400', badge: 'bg-blue-200 text-blue-700', type: 'workorder' as const },
   { key: 'diagnosis', label: 'Диагностика', color: 'border-indigo-400', badge: 'bg-indigo-200 text-indigo-700', type: 'workorder' as const },
@@ -305,6 +310,11 @@ function AppointmentFunnelCard({
       if (column === 'appeal') {
         await apiFetch(`/appointments/${appointment.id}/status`, {
           method: 'PATCH',
+          body: JSON.stringify({ status: 'ESTIMATING' }),
+        });
+      } else if (column === 'estimating') {
+        await apiFetch(`/appointments/${appointment.id}/status`, {
+          method: 'PATCH',
           body: JSON.stringify({ status: 'CONFIRMED' }),
         });
       } else if (column === 'scheduled') {
@@ -318,7 +328,7 @@ function AppointmentFunnelCard({
     }
   }
 
-  const actionLabel = column === 'appeal' ? 'Подтвердить →' : column === 'scheduled' ? 'Принять авто →' : null;
+  const actionLabel = column === 'appeal' ? 'На согласование →' : column === 'estimating' ? 'Подтвердить →' : column === 'scheduled' ? 'Принять авто →' : null;
 
   return (
     <div
@@ -438,6 +448,7 @@ function CreateAppointmentModal({
   onSuccess: () => void;
 }) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   // Client mode: 'existing' or 'new'
   const [isNewClient, setIsNewClient] = useState(false);
@@ -461,12 +472,9 @@ function CreateAppointmentModal({
   const [newMileage, setNewMileage] = useState('');
 
   // Appointment fields
-  const [date, setDate] = useState('');
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('10:00');
-  const [serviceBayId, setServiceBayId] = useState('');
   const [notes, setNotes] = useState('');
   const [source, setSource] = useState('');
+  const [advisorId, setAdvisorId] = useState(user?.id || '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -475,42 +483,19 @@ function CreateAppointmentModal({
     queryFn: () => apiFetch('/users?limit=100&sort=firstName&order=asc&role=CLIENT'),
   });
 
+  const { data: advisors } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
+    queryKey: ['advisors-for-appt'],
+    queryFn: async () => {
+      const res = await apiFetch('/users?limit=100&sort=firstName&order=asc');
+      return { data: res.data.filter((u: any) => ['OWNER', 'MANAGER', 'RECEPTIONIST'].includes(u.role)) };
+    },
+  });
+
   const { data: vehicles, refetch: refetchVehicles } = useQuery<{ data: { id: string; make: string; model: string; licensePlate: string | null; clientId: string }[] }>({
     queryKey: ['vehicles-for-appt', clientId],
     queryFn: () => apiFetch(`/vehicles?limit=50${clientId ? `&clientId=${clientId}` : ''}`),
     enabled: !!clientId && !isNewClient,
   });
-
-  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
-    queryKey: ['bays-for-appt'],
-    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
-  });
-
-  // Fetch schedule for selected bay + date
-  const INACTIVE_STATUSES = ['CANCELLED', 'COMPLETED', 'NO_SHOW', 'IN_PROGRESS'];
-  const { data: baySchedule } = useQuery<{ data: { id: string; status: string; scheduledStart: string; scheduledEnd: string; client: { firstName: string; lastName: string }; vehicle: { make: string; model: string } }[] }>({
-    queryKey: ['bay-schedule', serviceBayId, date],
-    queryFn: () => apiFetch(`/appointments?limit=50&sort=scheduledStart&order=asc&from=${date}T00:00:00&to=${date}T23:59:59&serviceBayId=${serviceBayId}`),
-    enabled: !!serviceBayId && !!date,
-  });
-
-  // Только активные заявки (не завершённые, не отменённые, не перешедшие в ЗН)
-  const activeSchedule = useMemo(() => {
-    if (!baySchedule?.data) return [];
-    return baySchedule.data.filter((a) => !INACTIVE_STATUSES.includes(a.status));
-  }, [baySchedule]);
-
-  // Проверка конфликта времени на выбранном посту
-  const hasConflict = useMemo(() => {
-    if (!serviceBayId || !date || !startTime || !endTime || !activeSchedule.length) return false;
-    const reqStart = new Date(`${date}T${startTime}:00`);
-    const reqEnd = new Date(`${date}T${endTime}:00`);
-    return activeSchedule.some((appt) => {
-      const s = new Date(appt.scheduledStart);
-      const e = new Date(appt.scheduledEnd);
-      return s < reqEnd && e > reqStart;
-    });
-  }, [serviceBayId, date, startTime, endTime, activeSchedule]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -579,21 +564,18 @@ function CreateAppointmentModal({
         return;
       }
 
-      if (!date) {
-        setError('Укажите дату');
-        setSaving(false);
-        return;
-      }
-
-      // 3. Create appointment
+      // 3. Create appointment — start = now, end = +1 hour
+      const now = new Date();
+      const scheduledStart = now.toISOString();
+      const scheduledEnd = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
       await apiFetch('/appointments', {
         method: 'POST',
         body: JSON.stringify({
           clientId: finalClientId,
           vehicleId: finalVehicleId,
-          scheduledStart: `${date}T${startTime}:00`,
-          scheduledEnd: `${date}T${endTime}:00`,
-          serviceBayId: serviceBayId || undefined,
+          scheduledStart,
+          scheduledEnd,
+          advisorId: advisorId || undefined,
           notes: notes || undefined,
           source: source || undefined,
         }),
@@ -766,70 +748,12 @@ function CreateAppointmentModal({
             </div>
           )}
 
-          {/* --- Date & Time --- */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Дата *</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} required />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Начало *</label>
-              <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} required />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Конец *</label>
-              <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} required />
-            </div>
-          </div>
-
-          {/* --- Service Bay --- */}
+          {/* --- Дата и время приёма (автоматически) --- */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Рабочий пост</label>
-            <select value={serviceBayId} onChange={(e) => setServiceBayId(e.target.value)} className={inputCls}>
-              <option value="">Не выбран</option>
-              {bays?.data?.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
-              ))}
-            </select>
-            {serviceBayId && date && activeSchedule.length > 0 && (() => {
-              const reqStart = new Date(`${date}T${startTime}:00`);
-              const reqEnd = new Date(`${date}T${endTime}:00`);
-              const conflicting = activeSchedule.filter((appt) => {
-                const s = new Date(appt.scheduledStart);
-                const e = new Date(appt.scheduledEnd);
-                return s < reqEnd && e > reqStart;
-              });
-              return (
-                <div className={`mt-2 rounded-lg border p-2 ${conflicting.length > 0 ? 'border-red-300 bg-red-50' : 'border-amber-200 bg-amber-50'}`}>
-                  {conflicting.length > 0 && (
-                    <p className="text-xs font-bold text-red-700">Конфликт! Пост занят в выбранное время:</p>
-                  )}
-                  {conflicting.length === 0 && (
-                    <p className="text-xs font-medium text-amber-700">Занято на {new Date(date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })} (без пересечений):</p>
-                  )}
-                  <ul className="mt-1 space-y-0.5">
-                    {activeSchedule.map((appt) => {
-                      const isConflict = conflicting.some((c) => c.id === appt.id);
-                      return (
-                        <li key={appt.id} className={`text-xs ${isConflict ? 'font-bold text-red-700' : 'text-amber-600'}`}>
-                          {new Date(appt.scheduledStart).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                          {' – '}
-                          {new Date(appt.scheduledEnd).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                          {' · '}
-                          {appt.client.firstName} {appt.client.lastName}
-                          {' · '}
-                          {appt.vehicle.make} {appt.vehicle.model}
-                          {isConflict && ' ⛔'}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              );
-            })()}
-            {serviceBayId && date && baySchedule?.data && activeSchedule.length === 0 && (
-              <p className="mt-1 text-xs text-green-600">Пост свободен весь день</p>
-            )}
+            <label className="block text-sm font-medium text-gray-700">Дата и время приёма</label>
+            <p className="mt-1 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+              {new Date().toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </p>
           </div>
 
           {/* --- Source --- */}
@@ -843,6 +767,17 @@ function CreateAppointmentModal({
               <option value="walk-in">Самозаход</option>
               <option value="referral">Рекомендация</option>
               <option value="repeat">Повторный визит</option>
+            </select>
+          </div>
+
+          {/* --- Advisor --- */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Приёмщик</label>
+            <select value={advisorId} onChange={(e) => setAdvisorId(e.target.value)} className={inputCls}>
+              <option value="">Не назначен</option>
+              {advisors?.data?.map((a) => (
+                <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>
+              ))}
             </select>
           </div>
 
@@ -870,11 +805,10 @@ function CreateAppointmentModal({
             </button>
             <button
               type="submit"
-              disabled={saving || hasConflict}
+              disabled={saving}
               className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-              title={hasConflict ? 'Пост занят в выбранное время' : undefined}
             >
-              {saving ? 'Сохранение...' : hasConflict ? 'Пост занят' : 'Записать'}
+              {saving ? 'Сохранение...' : 'Записать'}
             </button>
           </div>
         </form>
@@ -887,6 +821,7 @@ function CreateAppointmentModal({
 
 interface AppointmentDetail {
   id: string;
+  createdAt: string;
   scheduledStart: string;
   scheduledEnd: string;
   status: string;
@@ -919,53 +854,51 @@ function AppointmentDetailModal({
     staleTime: 0,
   });
 
-  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
-    queryKey: ['bays-modal'],
-    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
-  });
-
   const { data: advisors } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
     queryKey: ['advisors-modal'],
-    queryFn: () => apiFetch('/users?limit=50&role=RECEPTIONIST'),
+    queryFn: async () => {
+      const res = await apiFetch('/users?limit=100&sort=firstName&order=asc');
+      return { data: res.data.filter((u: any) => ['OWNER', 'MANAGER', 'RECEPTIONIST'].includes(u.role)) };
+    },
   });
 
   const [notes, setNotes] = useState('');
-  const [serviceBayId, setServiceBayId] = useState('');
   const [advisorId, setAdvisorId] = useState('');
-  const [date, setDate] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [showDecline, setShowDecline] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+  const [declineComment, setDeclineComment] = useState('');
+  const [arrivalDate, setArrivalDate] = useState('');
+  const [arrivalTime, setArrivalTime] = useState('09:00');
 
   if (appointment && !initialized) {
     setNotes(appointment.notes || '');
-    setServiceBayId(appointment.serviceBay?.id || '');
     setAdvisorId(appointment.advisor?.id || '');
-    const start = new Date(appointment.scheduledStart);
-    const end = new Date(appointment.scheduledEnd);
-    setDate(start.toISOString().slice(0, 10));
-    setStartTime(start.toTimeString().slice(0, 5));
-    setEndTime(end.toTimeString().slice(0, 5));
     setInitialized(true);
   }
 
-  async function handleSave() {
+  async function handleDecline() {
+    if (!declineReason) {
+      setError('Выберите причину отказа');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
       await apiFetch(`/appointments/${appointmentId}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          notes: notes || null,
-          serviceBayId: serviceBayId || null,
-          advisorId: advisorId || null,
-          scheduledStart: `${date}T${startTime}:00`,
-          scheduledEnd: `${date}T${endTime}:00`,
+          cancelReason: declineReason,
+          cancelComment: declineComment || null,
         }),
+      });
+      await apiFetch(`/appointments/${appointmentId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'CANCELLED' }),
       });
       onUpdate();
     } catch (err: any) {
-      setError(err.message || 'Ошибка сохранения');
+      setError(err.message || 'Ошибка');
     } finally {
       setSaving(false);
     }
@@ -976,6 +909,23 @@ function AppointmentDetailModal({
     setError('');
     try {
       if (column === 'appeal') {
+        await apiFetch(`/appointments/${appointmentId}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'ESTIMATING' }),
+        });
+      } else if (column === 'estimating') {
+        if (!arrivalDate) {
+          setError('Укажите дату приезда');
+          setSaving(false);
+          return;
+        }
+        const scheduledStart = `${arrivalDate}T${arrivalTime}:00`;
+        const endH = String(Math.min(Number(arrivalTime.split(':')[0]) + 1, 23)).padStart(2, '0');
+        const scheduledEnd = `${arrivalDate}T${endH}:${arrivalTime.split(':')[1]}:00`;
+        await apiFetch(`/appointments/${appointmentId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ scheduledStart, scheduledEnd, notes: notes || null, advisorId: advisorId || null }),
+        });
         await apiFetch(`/appointments/${appointmentId}/status`, {
           method: 'PATCH',
           body: JSON.stringify({ status: 'CONFIRMED' }),
@@ -992,7 +942,7 @@ function AppointmentDetailModal({
     }
   }
 
-  const actionLabel = column === 'appeal' ? 'Подтвердить запись' : column === 'scheduled' ? 'Принять авто → создать заказ-наряд' : null;
+  const actionLabel = column === 'appeal' ? 'На согласование' : column === 'estimating' ? 'Подтвердить запись' : column === 'scheduled' ? 'Принять авто → создать заказ-наряд' : null;
   const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
 
   return (
@@ -1000,7 +950,7 @@ function AppointmentDetailModal({
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">
-            {column === 'appeal' ? 'Обращение' : 'Запись'}
+            {column === 'appeal' ? 'Обращение' : column === 'estimating' ? 'Согласование' : 'Запись'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
         </div>
@@ -1035,32 +985,21 @@ function AppointmentDetailModal({
               )}
             </div>
 
-            {/* Date & Time (editable) */}
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-600">Дата</label>
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600">Начало</label>
-                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600">Конец</label>
-                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
-              </div>
+            {/* Dates (read-only) */}
+            <div className="rounded-lg bg-gray-50 p-3">
+              <p className="text-xs font-medium text-gray-500">Дата обращения</p>
+              <p className="text-sm text-gray-900">
+                {new Date(appointment.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </p>
             </div>
-
-            {/* Service Bay */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600">Рабочий пост</label>
-              <select value={serviceBayId} onChange={(e) => setServiceBayId(e.target.value)} className={inputCls}>
-                <option value="">Не выбран</option>
-                {bays?.data?.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
-                ))}
-              </select>
-            </div>
+            {column === 'scheduled' && (
+              <div className="rounded-lg bg-blue-50 p-3">
+                <p className="text-xs font-medium text-blue-600">Дата записи (приезд)</p>
+                <p className="text-sm font-semibold text-blue-900">
+                  {new Date(appointment.scheduledStart).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            )}
 
             {/* Advisor */}
             <div>
@@ -1085,26 +1024,81 @@ function AppointmentDetailModal({
               />
             </div>
 
+            {/* Arrival date/time — only on estimating step */}
+            {column === 'estimating' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600">Дата и время приезда *</label>
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <input type="date" value={arrivalDate} onChange={(e) => setArrivalDate(e.target.value)} className={inputCls} />
+                  <input type="time" value={arrivalTime} onChange={(e) => setArrivalTime(e.target.value)} className={inputCls} />
+                </div>
+              </div>
+            )}
+
+            {/* Decline form */}
+            {showDecline && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-2">
+                <p className="text-sm font-medium text-red-800">Причина отказа</p>
+                <select
+                  value={declineReason}
+                  onChange={(e) => setDeclineReason(e.target.value)}
+                  className={inputCls}
+                >
+                  <option value="">Выберите причину</option>
+                  <option value="Дорого">Дорого</option>
+                  <option value="Долго ждать">Долго ждать</option>
+                  <option value="Передумал">Передумал</option>
+                  <option value="Обратился в другой сервис">Обратился в другой сервис</option>
+                  <option value="Не отвечает">Не отвечает</option>
+                  <option value="Другое">Другое</option>
+                </select>
+                <input
+                  type="text"
+                  value={declineComment}
+                  onChange={(e) => setDeclineComment(e.target.value)}
+                  placeholder="Комментарий (необязательно)"
+                  className={inputCls}
+                />
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={() => setShowDecline(false)}
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Назад
+                  </button>
+                  <button
+                    onClick={handleDecline}
+                    disabled={saving}
+                    className="flex-1 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {saving ? '...' : 'Отказать'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {error && <p className="text-sm text-red-600">{error}</p>}
 
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                {saving ? '...' : 'Сохранить'}
-              </button>
-              {actionLabel && (
+            {!showDecline && (
+              <div className="flex gap-2 pt-2">
                 <button
-                  onClick={handleAction}
+                  onClick={() => setShowDecline(true)}
                   disabled={saving}
-                  className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                  className="flex-1 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                 >
-                  {saving ? '...' : actionLabel}
+                  Отказ
                 </button>
-              )}
-            </div>
+                {actionLabel && (
+                  <button
+                    onClick={handleAction}
+                    disabled={saving}
+                    className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {saving ? '...' : actionLabel}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           <div className="py-8 text-center text-red-500">Не удалось загрузить данные</div>

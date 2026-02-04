@@ -78,6 +78,7 @@ export class DashboardService {
   async getClientFunnel(tenantId: string) {
     const [
       pendingAppointments,
+      estimatingAppointments,
       confirmedAppointments,
       newOrders,
       diagnosedOrders,
@@ -89,6 +90,13 @@ export class DashboardService {
       // Обращение — записи со статусом PENDING
       this.prisma.appointment.findMany({
         where: { tenantId, status: 'PENDING' },
+        include: appointmentFunnelInclude,
+        orderBy: { scheduledStart: 'asc' },
+      }),
+
+      // Согласование — записи со статусом ESTIMATING
+      this.prisma.appointment.findMany({
+        where: { tenantId, status: 'ESTIMATING' },
         include: appointmentFunnelInclude,
         orderBy: { scheduledStart: 'asc' },
       }),
@@ -146,6 +154,7 @@ export class DashboardService {
 
     return {
       appeal: pendingAppointments,
+      estimating: estimatingAppointments,
       scheduled: confirmedAppointments,
       intake: newOrders,
       diagnosis: diagnosedOrders,

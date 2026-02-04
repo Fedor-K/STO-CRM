@@ -70,6 +70,14 @@ class UpdateAppointmentDto {
   notes?: string;
 
   @IsOptional()
+  @IsString()
+  cancelReason?: string;
+
+  @IsOptional()
+  @IsString()
+  cancelComment?: string;
+
+  @IsOptional()
   @IsEnum(AppointmentStatus)
   status?: AppointmentStatus;
 }
