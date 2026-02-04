@@ -80,6 +80,9 @@ class UpdateAppointmentDto {
   @IsOptional()
   @IsEnum(AppointmentStatus)
   status?: AppointmentStatus;
+
+  @IsOptional()
+  plannedItems?: any;
 }
 
 class UpdateStatusDto {

@@ -899,6 +899,17 @@ interface AppointmentDetail {
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   serviceBay: { id: string; name: string; type: string | null } | null;
+  plannedItems: PlannedItem[] | null;
+}
+
+interface PlannedItem {
+  type: 'LABOR' | 'PART';
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  normHours?: number;
+  serviceId?: string;
+  partId?: string;
 }
 
 function AppointmentDetailModal({
@@ -929,6 +940,18 @@ function AppointmentDetailModal({
     },
   });
 
+  const { data: services } = useQuery<{ data: { id: string; name: string; price: string | number; normHours: string | number | null }[] }>({
+    queryKey: ['services-catalog'],
+    queryFn: () => apiFetch('/services?limit=200&sort=name&order=asc'),
+    enabled: column === 'estimating',
+  });
+
+  const { data: parts } = useQuery<{ data: { id: string; name: string; sellPrice: string | number; brand: string | null }[] }>({
+    queryKey: ['parts-catalog'],
+    queryFn: () => apiFetch('/parts?limit=200&sort=name&order=asc'),
+    enabled: column === 'estimating',
+  });
+
   const [notes, setNotes] = useState('');
   const [advisorId, setAdvisorId] = useState('');
   const [initialized, setInitialized] = useState(false);
@@ -937,10 +960,19 @@ function AppointmentDetailModal({
   const [declineComment, setDeclineComment] = useState('');
   const [arrivalDate, setArrivalDate] = useState('');
   const [arrivalTime, setArrivalTime] = useState('09:00');
+  const [plannedItems, setPlannedItems] = useState<PlannedItem[]>([]);
+  const [showAddPlanned, setShowAddPlanned] = useState(false);
+  const [plannedTab, setPlannedTab] = useState<'LABOR' | 'PART'>('LABOR');
+  const [selectedServiceId, setSelectedServiceId] = useState('');
+  const [selectedPartId, setSelectedPartId] = useState('');
+  const [partQty, setPartQty] = useState('1');
 
   if (appointment && !initialized) {
     setNotes(appointment.notes || '');
     setAdvisorId(appointment.advisor?.id || '');
+    if (appointment.plannedItems && Array.isArray(appointment.plannedItems)) {
+      setPlannedItems(appointment.plannedItems as PlannedItem[]);
+    }
     setInitialized(true);
   }
 
@@ -971,6 +1003,69 @@ function AppointmentDetailModal({
     }
   }
 
+  function handleAddPlannedLabor() {
+    const svc = services?.data?.find((s) => s.id === selectedServiceId);
+    if (!svc) return;
+    const normHours = svc.normHours ? Number(svc.normHours) : 1;
+    setPlannedItems([...plannedItems, {
+      type: 'LABOR',
+      description: svc.name,
+      quantity: normHours,
+      unitPrice: 2000,
+      normHours,
+      serviceId: svc.id,
+    }]);
+    setSelectedServiceId('');
+    setShowAddPlanned(false);
+  }
+
+  function handleAddPlannedPart() {
+    const part = parts?.data?.find((p) => p.id === selectedPartId);
+    if (!part) return;
+    setPlannedItems([...plannedItems, {
+      type: 'PART',
+      description: part.name,
+      quantity: Number(partQty) || 1,
+      unitPrice: Number(part.sellPrice),
+      partId: part.id,
+    }]);
+    setSelectedPartId('');
+    setPartQty('1');
+    setShowAddPlanned(false);
+  }
+
+  function handleRemovePlannedItem(idx: number) {
+    setPlannedItems(plannedItems.filter((_, i) => i !== idx));
+  }
+
+  async function handleSaveAppointment() {
+    setSaving(true);
+    setError('');
+    try {
+      const body: any = {
+        notes: notes || null,
+        advisorId: advisorId || null,
+      };
+      if (column === 'estimating') {
+        body.plannedItems = plannedItems;
+        if (arrivalDate) {
+          body.scheduledStart = `${arrivalDate}T${arrivalTime}:00`;
+          const endH = String(Math.min(Number(arrivalTime.split(':')[0]) + 1, 23)).padStart(2, '0');
+          body.scheduledEnd = `${arrivalDate}T${endH}:${arrivalTime.split(':')[1]}:00`;
+        }
+      }
+      await apiFetch(`/appointments/${appointmentId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+      onUpdate();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка сохранения');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleAction() {
     setSaving(true);
     setError('');
@@ -991,7 +1086,7 @@ function AppointmentDetailModal({
         const scheduledEnd = `${arrivalDate}T${endH}:${arrivalTime.split(':')[1]}:00`;
         await apiFetch(`/appointments/${appointmentId}`, {
           method: 'PATCH',
-          body: JSON.stringify({ scheduledStart, scheduledEnd, notes: notes || null, advisorId: advisorId || null }),
+          body: JSON.stringify({ scheduledStart, scheduledEnd, notes: notes || null, advisorId: advisorId || null, plannedItems }),
         });
         await apiFetch(`/appointments/${appointmentId}/status`, {
           method: 'PATCH',
@@ -1009,12 +1104,16 @@ function AppointmentDetailModal({
     }
   }
 
-  const actionLabel = column === 'appeal' ? 'На согласование' : column === 'estimating' ? 'Подтвердить запись' : column === 'scheduled' ? 'Принять авто → создать заказ-наряд' : null;
+  const plannedLabors = plannedItems.filter((i) => i.type === 'LABOR');
+  const plannedParts = plannedItems.filter((i) => i.type === 'PART');
+  const plannedTotal = plannedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+  const canConfirm = column === 'estimating' ? !!(arrivalDate && plannedLabors.length > 0) : true;
+  const actionLabel = column === 'appeal' ? 'На согласование' : column === 'estimating' ? 'Подтвердить' : column === 'scheduled' ? 'Принять авто → создать заказ-наряд' : null;
   const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${column === 'estimating' ? 'max-w-2xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">
             {column === 'appeal' ? 'Обращение' : column === 'estimating' ? 'Согласование' : 'Запись'}
@@ -1102,6 +1201,170 @@ function AppointmentDetailModal({
               </div>
             )}
 
+            {/* Planned items — only on estimating step */}
+            {column === 'estimating' && (
+              <div className="rounded-lg border border-gray-200">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="text-sm font-semibold text-gray-700">
+                    Работы и материалы ({plannedItems.length})
+                  </span>
+                  {plannedTotal > 0 && (
+                    <span className="text-sm font-bold text-gray-900">{formatMoney(plannedTotal)}</span>
+                  )}
+                </div>
+                <div className="border-t border-gray-200">
+                  {/* Tabs */}
+                  <div className="flex border-b border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setPlannedTab('LABOR')}
+                      className={`flex-1 px-3 py-2 text-xs font-medium ${plannedTab === 'LABOR' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      Работы ({plannedLabors.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPlannedTab('PART')}
+                      className={`flex-1 px-3 py-2 text-xs font-medium ${plannedTab === 'PART' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    >
+                      Материалы ({plannedParts.length})
+                    </button>
+                  </div>
+
+                  <div className="px-3 py-2">
+                    {plannedTab === 'LABOR' ? (
+                      <>
+                        {plannedLabors.length > 0 ? (
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-gray-100 text-left text-gray-500">
+                                <th className="pb-1 font-medium">Наименование</th>
+                                <th className="pb-1 font-medium text-right w-16">Норма</th>
+                                <th className="pb-1 font-medium text-right w-20">Всего</th>
+                                <th className="pb-1 w-6"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {plannedItems.map((item, idx) => item.type === 'LABOR' && (
+                                <tr key={idx} className="border-b border-gray-50">
+                                  <td className="py-1.5 text-gray-700">{item.description}</td>
+                                  <td className="py-1.5 text-right text-gray-600">{item.normHours ?? item.quantity}</td>
+                                  <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
+                                  <td className="py-1.5 text-right">
+                                    <button onClick={() => handleRemovePlannedItem(idx)} className="text-red-400 hover:text-red-600">&times;</button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <p className="py-3 text-center text-xs text-gray-400">Нет работ</p>
+                        )}
+                        <div className="mt-2">
+                          {showAddPlanned && plannedTab === 'LABOR' ? (
+                            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
+                              <select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} className={inputCls}>
+                                <option value="">Выберите работу из каталога</option>
+                                {services?.data?.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name} — {s.normHours ? `${Number(s.normHours)} н/ч` : '—'}
+                                  </option>
+                                ))}
+                              </select>
+                              {selectedServiceId && (() => {
+                                const svc = services?.data?.find((s) => s.id === selectedServiceId);
+                                if (!svc) return null;
+                                const norm = svc.normHours ? Number(svc.normHours) : 1;
+                                const total = 2000 * norm;
+                                return (
+                                  <div className="rounded bg-white px-3 py-2 text-xs text-gray-600 space-y-0.5">
+                                    <div className="flex justify-between"><span>Цена н/ч:</span><span className="font-medium">2 000 ₽</span></div>
+                                    <div className="flex justify-between"><span>Норма:</span><span className="font-medium">{norm}</span></div>
+                                    <div className="flex justify-between"><span>Всего:</span><span className="font-semibold text-gray-900">{formatMoney(total)}</span></div>
+                                  </div>
+                                );
+                              })()}
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => { setShowAddPlanned(false); setSelectedServiceId(''); }} className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Отмена</button>
+                                <button type="button" onClick={handleAddPlannedLabor} disabled={!selectedServiceId} className="flex-1 rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">Добавить</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => { setShowAddPlanned(true); setPlannedTab('LABOR'); }} className="text-xs font-medium text-primary-600 hover:text-primary-700">+ Добавить работу</button>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {plannedParts.length > 0 ? (
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-gray-100 text-left text-gray-500">
+                                <th className="pb-1 font-medium">Наименование</th>
+                                <th className="pb-1 font-medium text-right w-16">Кол-во</th>
+                                <th className="pb-1 font-medium text-right w-20">Всего</th>
+                                <th className="pb-1 w-6"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {plannedItems.map((item, idx) => item.type === 'PART' && (
+                                <tr key={idx} className="border-b border-gray-50">
+                                  <td className="py-1.5 text-gray-700">{item.description}</td>
+                                  <td className="py-1.5 text-right text-gray-600">{item.quantity}</td>
+                                  <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
+                                  <td className="py-1.5 text-right">
+                                    <button onClick={() => handleRemovePlannedItem(idx)} className="text-red-400 hover:text-red-600">&times;</button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <p className="py-3 text-center text-xs text-gray-400">Нет материалов</p>
+                        )}
+                        <div className="mt-2">
+                          {showAddPlanned && plannedTab === 'PART' ? (
+                            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
+                              <select value={selectedPartId} onChange={(e) => setSelectedPartId(e.target.value)} className={inputCls}>
+                                <option value="">Выберите материал из каталога</option>
+                                {parts?.data?.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.name}{p.brand ? ` (${p.brand})` : ''} — {formatMoney(p.sellPrice)}
+                                  </option>
+                                ))}
+                              </select>
+                              <input type="number" min={1} value={partQty} onChange={(e) => setPartQty(e.target.value)} placeholder="Кол-во" className={inputCls} />
+                              <div className="flex gap-2">
+                                <button type="button" onClick={() => { setShowAddPlanned(false); setSelectedPartId(''); setPartQty('1'); }} className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Отмена</button>
+                                <button type="button" onClick={handleAddPlannedPart} disabled={!selectedPartId} className="flex-1 rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">Добавить</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => { setShowAddPlanned(true); setPlannedTab('PART'); }} className="text-xs font-medium text-primary-600 hover:text-primary-700">+ Добавить материал</button>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Totals */}
+                  {plannedTotal > 0 && (
+                    <div className="flex justify-end gap-4 border-t border-gray-100 px-4 py-2">
+                      <div className="text-xs text-gray-500">
+                        Работы: <span className="font-semibold text-gray-700">{formatMoney(plannedLabors.reduce((s, i) => s + i.unitPrice * i.quantity, 0))}</span>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Материалы: <span className="font-semibold text-gray-700">{formatMoney(plannedParts.reduce((s, i) => s + i.unitPrice * i.quantity, 0))}</span>
+                      </div>
+                      <div className="text-sm font-bold text-gray-900">
+                        Итого: {formatMoney(plannedTotal)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Decline form */}
             {showDecline && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-2">
@@ -1151,14 +1414,23 @@ function AppointmentDetailModal({
                 <button
                   onClick={() => setShowDecline(true)}
                   disabled={saving}
-                  className="flex-1 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                  className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                 >
                   Отказ
                 </button>
+                {column === 'estimating' && (
+                  <button
+                    onClick={handleSaveAppointment}
+                    disabled={saving}
+                    className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {saving ? '...' : 'Сохранить'}
+                  </button>
+                )}
                 {actionLabel && (
                   <button
                     onClick={handleAction}
-                    disabled={saving}
+                    disabled={saving || !canConfirm}
                     className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
                   >
                     {saving ? '...' : actionLabel}

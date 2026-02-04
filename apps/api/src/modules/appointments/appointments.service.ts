@@ -177,6 +177,7 @@ export class AppointmentsService {
       cancelReason?: string;
       cancelComment?: string;
       status?: AppointmentStatus;
+      plannedItems?: any;
     },
   ): Promise<any> {
     const existing = await this.findById(tenantId, id);
