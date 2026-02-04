@@ -1596,6 +1596,32 @@ function WorkOrderDetailModal({
     }
   }
 
+  async function handleAddServiceFromChecklist(serviceId: string) {
+    const svc = services?.data?.find((s) => s.id === serviceId);
+    if (!svc) return;
+    setSaving(true);
+    setError('');
+    try {
+      const normHours = svc.normHours ? Number(svc.normHours) : 1;
+      await apiFetch(`/work-orders/${workOrderId}/items`, {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'LABOR',
+          description: svc.name,
+          quantity: normHours,
+          unitPrice: 2000,
+          normHours,
+          serviceId: svc.id,
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка добавления');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleAddLabor() {
     const svc = services?.data?.find((s) => s.id === selectedServiceId);
     if (!svc) return;
@@ -1730,7 +1756,12 @@ function WorkOrderDetailModal({
 
                 {/* Inspection checklist - relevant for DIAGNOSED+ */}
                 {['DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED', 'COMPLETED'].includes(wo.status) && (
-                  <InspectionChecklistEditor checklist={checklist} onChange={setChecklist} />
+                  <InspectionChecklistEditor
+                    checklist={checklist}
+                    onChange={setChecklist}
+                    services={services?.data || []}
+                    onAddService={handleAddServiceFromChecklist}
+                  />
                 )}
 
                 {/* Mechanic */}
@@ -1987,21 +2018,32 @@ function EditablePartRow({
 function InspectionChecklistEditor({
   checklist,
   onChange,
+  services,
+  onAddService,
 }: {
   checklist: InspectionChecklist;
   onChange: (c: InspectionChecklist) => void;
+  services: { id: string; name: string; normHours: string | number | null }[];
+  onAddService: (serviceId: string) => void;
 }) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [suggestForItem, setSuggestForItem] = useState<string | null>(null);
+  const [suggestServiceId, setSuggestServiceId] = useState('');
 
   function toggleGroup(key: string) {
     setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
   function toggleItem(itemKey: string) {
+    const wasChecked = checklist[itemKey]?.checked;
     onChange({
       ...checklist,
-      [itemKey]: { ...checklist[itemKey], checked: !checklist[itemKey]?.checked },
+      [itemKey]: { ...checklist[itemKey], checked: !wasChecked },
     });
+    if (!wasChecked) {
+      setSuggestForItem(itemKey);
+      setSuggestServiceId('');
+    }
   }
 
   function setNote(itemKey: string, note: string) {
@@ -2035,23 +2077,66 @@ function InspectionChecklistEditor({
                   {group.items.map((item) => {
                     const entry = checklist[item.key] || { checked: false, note: '' };
                     return (
-                      <div key={item.key} className="flex items-start gap-2">
-                        <input
-                          type="checkbox"
-                          checked={entry.checked}
-                          onChange={() => toggleItem(item.key)}
-                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className="text-xs text-gray-700">{item.label}</span>
+                      <div key={item.key}>
+                        <div className="flex items-start gap-2">
                           <input
-                            type="text"
-                            value={entry.note}
-                            onChange={(e) => setNote(item.key, e.target.value)}
-                            placeholder="Комментарий..."
-                            className="mt-0.5 block w-full rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 placeholder:text-gray-300 focus:border-primary-400 focus:outline-none"
+                            type="checkbox"
+                            checked={entry.checked}
+                            onChange={() => toggleItem(item.key)}
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                           />
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs text-gray-700">{item.label}</span>
+                            <input
+                              type="text"
+                              value={entry.note}
+                              onChange={(e) => setNote(item.key, e.target.value)}
+                              placeholder="Комментарий..."
+                              className="mt-0.5 block w-full rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 placeholder:text-gray-300 focus:border-primary-400 focus:outline-none"
+                            />
+                          </div>
                         </div>
+                        {suggestForItem === item.key && (
+                          <div className="mt-1 ml-6 rounded border border-amber-200 bg-amber-50 px-3 py-2">
+                            <p className="text-xs font-medium text-amber-800 mb-1">Добавить работу?</p>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={suggestServiceId}
+                                onChange={(e) => setSuggestServiceId(e.target.value)}
+                                className="flex-1 rounded border border-amber-300 bg-white px-2 py-1 text-[11px] text-gray-700 focus:border-amber-400 focus:outline-none"
+                              >
+                                <option value="">Выберите из каталога</option>
+                                {services.map((s) => (
+                                  <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (suggestServiceId) {
+                                    onAddService(suggestServiceId);
+                                    setSuggestForItem(null);
+                                    setSuggestServiceId('');
+                                  }
+                                }}
+                                disabled={!suggestServiceId}
+                                className="rounded bg-amber-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-600 disabled:opacity-50"
+                              >
+                                Добавить
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSuggestForItem(null);
+                                  setSuggestServiceId('');
+                                }}
+                                className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+                              >
+                                Пропустить
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
