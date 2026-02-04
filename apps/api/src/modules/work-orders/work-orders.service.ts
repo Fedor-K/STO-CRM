@@ -255,8 +255,46 @@ export class WorkOrdersService {
           totalParts: 0,
           totalAmount: 0,
         },
-        include: workOrderInclude,
       });
+
+      // Create WorkOrderItems from plannedItems
+      const plannedItems = (appointment.plannedItems as any[]) || [];
+      let totalLabor = 0;
+      let totalParts = 0;
+
+      for (const item of plannedItems) {
+        const totalPrice = (item.unitPrice || 0) * (item.quantity || 1);
+        await tx.workOrderItem.create({
+          data: {
+            workOrderId: wo.id,
+            type: item.type === 'PART' ? 'PART' : 'LABOR',
+            description: item.description || '',
+            quantity: item.quantity || 1,
+            unitPrice: item.unitPrice || 0,
+            totalPrice,
+            normHours: item.normHours ?? null,
+            serviceId: item.serviceId ?? null,
+            partId: item.partId ?? null,
+          },
+        });
+        if (item.type === 'PART') {
+          totalParts += totalPrice;
+        } else {
+          totalLabor += totalPrice;
+        }
+      }
+
+      // Update totals
+      if (plannedItems.length > 0) {
+        await tx.workOrder.update({
+          where: { id: wo.id },
+          data: {
+            totalLabor,
+            totalParts,
+            totalAmount: totalLabor + totalParts,
+          },
+        });
+      }
 
       // Update appointment status to IN_PROGRESS
       await tx.appointment.update({
@@ -264,7 +302,10 @@ export class WorkOrdersService {
         data: { status: 'IN_PROGRESS' },
       });
 
-      return wo;
+      return tx.workOrder.findFirst({
+        where: { id: wo.id },
+        include: workOrderInclude,
+      });
     });
 
     return workOrder;

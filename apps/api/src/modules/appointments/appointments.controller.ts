@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsUUID, IsArray } from 'class-validator';
 import { AppointmentsService } from './appointments.service';
 import { Roles, CurrentTenant } from '../../common/decorators';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -82,7 +82,8 @@ class UpdateAppointmentDto {
   status?: AppointmentStatus;
 
   @IsOptional()
-  plannedItems?: any;
+  @IsArray()
+  plannedItems?: any[];
 }
 
 class UpdateStatusDto {

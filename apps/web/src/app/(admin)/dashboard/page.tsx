@@ -379,11 +379,6 @@ function AppointmentFunnelCard({
           method: 'PATCH',
           body: JSON.stringify({ status: 'ESTIMATING' }),
         });
-      } else if (column === 'estimating') {
-        await apiFetch(`/appointments/${appointment.id}/status`, {
-          method: 'PATCH',
-          body: JSON.stringify({ status: 'CONFIRMED' }),
-        });
       } else if (column === 'scheduled') {
         await apiFetch(`/work-orders/from-appointment/${appointment.id}`, { method: 'POST' });
       }
@@ -395,7 +390,7 @@ function AppointmentFunnelCard({
     }
   }
 
-  const actionLabel = column === 'appeal' ? 'На согласование →' : column === 'estimating' ? 'Подтвердить →' : column === 'scheduled' ? 'Принять авто →' : null;
+  const actionLabel = column === 'appeal' ? 'На согласование →' : column === 'scheduled' ? 'Принять авто →' : null;
 
   return (
     <div
@@ -923,6 +918,7 @@ function AppointmentDetailModal({
   onClose: () => void;
   onUpdate: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -972,6 +968,21 @@ function AppointmentDetailModal({
     setAdvisorId(appointment.advisor?.id || '');
     if (appointment.plannedItems && Array.isArray(appointment.plannedItems)) {
       setPlannedItems(appointment.plannedItems as PlannedItem[]);
+    }
+    if (column === 'estimating' && appointment.scheduledStart) {
+      const d = new Date(appointment.scheduledStart);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const h = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      // Only pre-fill if it's not the auto-generated "now" date from creation
+      const created = new Date(appointment.createdAt);
+      const diffMs = Math.abs(d.getTime() - created.getTime());
+      if (diffMs > 120000) {
+        setArrivalDate(`${y}-${m}-${day}`);
+        setArrivalTime(`${h}:${min}`);
+      }
     }
     setInitialized(true);
   }
@@ -1058,7 +1069,8 @@ function AppointmentDetailModal({
         method: 'PATCH',
         body: JSON.stringify(body),
       });
-      onUpdate();
+      refetchAppt();
+      queryClient.invalidateQueries({ queryKey: ['client-funnel'] });
     } catch (err: any) {
       setError(err.message || 'Ошибка сохранения');
     } finally {
@@ -1241,6 +1253,7 @@ function AppointmentDetailModal({
                                 <th className="pb-1 font-medium">Наименование</th>
                                 <th className="pb-1 font-medium text-right w-16">Норма</th>
                                 <th className="pb-1 font-medium text-right w-20">Всего</th>
+                                <th className="pb-1 font-medium text-right">в т.ч. НДС</th>
                                 <th className="pb-1 w-6"></th>
                               </tr>
                             </thead>
@@ -1250,6 +1263,7 @@ function AppointmentDetailModal({
                                   <td className="py-1.5 text-gray-700">{item.description}</td>
                                   <td className="py-1.5 text-right text-gray-600">{item.normHours ?? item.quantity}</td>
                                   <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
+                                  <td className="py-1.5 text-right text-gray-400">{formatVat(item.unitPrice * item.quantity)}</td>
                                   <td className="py-1.5 text-right">
                                     <button onClick={() => handleRemovePlannedItem(idx)} className="text-red-400 hover:text-red-600">&times;</button>
                                   </td>
@@ -1303,6 +1317,7 @@ function AppointmentDetailModal({
                                 <th className="pb-1 font-medium">Наименование</th>
                                 <th className="pb-1 font-medium text-right w-16">Кол-во</th>
                                 <th className="pb-1 font-medium text-right w-20">Всего</th>
+                                <th className="pb-1 font-medium text-right">в т.ч. НДС</th>
                                 <th className="pb-1 w-6"></th>
                               </tr>
                             </thead>
@@ -1312,6 +1327,7 @@ function AppointmentDetailModal({
                                   <td className="py-1.5 text-gray-700">{item.description}</td>
                                   <td className="py-1.5 text-right text-gray-600">{item.quantity}</td>
                                   <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
+                                  <td className="py-1.5 text-right text-gray-400">{formatVat(item.unitPrice * item.quantity)}</td>
                                   <td className="py-1.5 text-right">
                                     <button onClick={() => handleRemovePlannedItem(idx)} className="text-red-400 hover:text-red-600">&times;</button>
                                   </td>

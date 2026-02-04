@@ -15,6 +15,7 @@ import {
   IsEnum,
   IsUUID,
   IsNumber,
+  IsObject,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -77,7 +78,8 @@ class UpdateWorkOrderDto {
   diagnosticNotes?: string;
 
   @IsOptional()
-  inspectionChecklist?: any;
+  @IsObject()
+  inspectionChecklist?: Record<string, any>;
 }
 
 class UpdateStatusDto {
