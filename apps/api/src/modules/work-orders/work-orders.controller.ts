@@ -75,6 +75,9 @@ class UpdateWorkOrderDto {
 
   @IsOptional() @IsString()
   diagnosticNotes?: string;
+
+  @IsOptional()
+  inspectionChecklist?: any;
 }
 
 class UpdateStatusDto {

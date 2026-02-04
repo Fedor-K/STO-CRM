@@ -5,6 +5,11 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
 import Link from 'next/link';
+import {
+  INSPECTION_GROUPS,
+  createEmptyChecklist,
+  type InspectionChecklist,
+} from '@sto-crm/shared';
 
 // --- Types ---
 
@@ -67,7 +72,7 @@ const STATUS_LABELS: Record<string, string> = {
   ESTIMATING: 'На согласовании',
   CONFIRMED: 'Записан',
   NEW: 'Новый',
-  DIAGNOSED: 'Диагностика',
+  DIAGNOSED: 'Осмотр',
   APPROVED: 'Согласован',
   IN_PROGRESS: 'В работе',
   PAUSED: 'Пауза',
@@ -93,7 +98,7 @@ const FUNNEL_COLUMNS = [
   { key: 'appeal', label: 'Обращение', color: 'border-slate-400', badge: 'bg-slate-200 text-slate-700', type: 'appointment' as const },
   { key: 'estimating', label: 'Согласование', color: 'border-amber-400', badge: 'bg-amber-200 text-amber-700', type: 'appointment' as const },
   { key: 'scheduled', label: 'Записан', color: 'border-sky-400', badge: 'bg-sky-200 text-sky-700', type: 'appointment' as const },
-  { key: 'diagnosis', label: 'Диагностика', color: 'border-indigo-400', badge: 'bg-indigo-200 text-indigo-700', type: 'workorder' as const },
+  { key: 'diagnosis', label: 'Осмотр', color: 'border-indigo-400', badge: 'bg-indigo-200 text-indigo-700', type: 'workorder' as const },
   { key: 'approval', label: 'Согласование', color: 'border-violet-400', badge: 'bg-violet-200 text-violet-700', type: 'workorder' as const },
   { key: 'inProgress', label: 'В работе', color: 'border-yellow-400', badge: 'bg-yellow-200 text-yellow-700', type: 'workorder' as const },
   { key: 'ready', label: 'Готов', color: 'border-green-400', badge: 'bg-green-200 text-green-700', type: 'workorder' as const },
@@ -424,7 +429,7 @@ function AppointmentFunnelCard({
 }
 
 const WO_NEXT_STATUS: Record<string, { status: string; label: string }> = {
-  NEW: { status: 'DIAGNOSED', label: 'Диагностика →' },
+  NEW: { status: 'DIAGNOSED', label: 'Осмотр →' },
   DIAGNOSED: { status: 'APPROVED', label: 'Согласовать →' },
   APPROVED: { status: 'IN_PROGRESS', label: 'В работу →' },
   IN_PROGRESS: { status: 'COMPLETED', label: 'Готово →' },
@@ -1178,6 +1183,7 @@ interface WorkOrderDetail {
   status: string;
   clientComplaints: string | null;
   diagnosticNotes: string | null;
+  inspectionChecklist: InspectionChecklist | null;
   totalLabor: string | number;
   totalParts: string | number;
   totalAmount: string | number;
@@ -1229,15 +1235,9 @@ function WorkOrderDetailModal({
     queryFn: () => apiFetch('/users?limit=50&role=MECHANIC'),
   });
 
-  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
-    queryKey: ['bays-modal'],
-    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
-  });
-
   const [complaints, setComplaints] = useState('');
-  const [diagNotes, setDiagNotes] = useState('');
+  const [checklist, setChecklist] = useState<InspectionChecklist>(createEmptyChecklist());
   const [mechanicId, setMechanicId] = useState('');
-  const [serviceBayId, setServiceBayId] = useState('');
   const [initialized, setInitialized] = useState(false);
 
   // New item form
@@ -1249,9 +1249,10 @@ function WorkOrderDetailModal({
 
   if (wo && !initialized) {
     setComplaints(wo.clientComplaints || '');
-    setDiagNotes(wo.diagnosticNotes || '');
+    if (wo.inspectionChecklist) {
+      setChecklist({ ...createEmptyChecklist(), ...wo.inspectionChecklist });
+    }
     setMechanicId(wo.mechanic?.id || '');
-    setServiceBayId(wo.serviceBay?.id || '');
     setInitialized(true);
   }
 
@@ -1266,9 +1267,8 @@ function WorkOrderDetailModal({
         method: 'PATCH',
         body: JSON.stringify({
           clientComplaints: complaints || null,
-          diagnosticNotes: diagNotes || null,
+          inspectionChecklist: checklist,
           mechanicId: mechanicId || null,
-          serviceBayId: serviceBayId || null,
         }),
       });
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
@@ -1389,40 +1389,20 @@ function WorkOrderDetailModal({
                   />
                 </div>
 
-                {/* Diagnostic notes - relevant for DIAGNOSED+ */}
+                {/* Inspection checklist - relevant for DIAGNOSED+ */}
                 {['DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED', 'COMPLETED'].includes(wo.status) && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600">Заметки диагностики</label>
-                    <textarea
-                      value={diagNotes}
-                      onChange={(e) => setDiagNotes(e.target.value)}
-                      rows={2}
-                      placeholder="Результаты диагностики..."
-                      className={inputCls}
-                    />
-                  </div>
+                  <InspectionChecklistEditor checklist={checklist} onChange={setChecklist} />
                 )}
 
-                {/* Mechanic + Bay */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600">Механик</label>
-                    <select value={mechanicId} onChange={(e) => setMechanicId(e.target.value)} className={inputCls}>
-                      <option value="">Не назначен</option>
-                      {mechanics?.data?.map((m) => (
-                        <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600">Рабочий пост</label>
-                    <select value={serviceBayId} onChange={(e) => setServiceBayId(e.target.value)} className={inputCls}>
-                      <option value="">Не выбран</option>
-                      {bays?.data?.map((b) => (
-                        <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
+                {/* Mechanic */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">Механик</label>
+                  <select value={mechanicId} onChange={(e) => setMechanicId(e.target.value)} className={inputCls}>
+                    <option value="">Не назначен</option>
+                    {mechanics?.data?.map((m) => (
+                      <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                    ))}
+                  </select>
                 </div>
               </>
             )}
@@ -1574,6 +1554,89 @@ function WorkOrderDetailModal({
         ) : (
           <div className="py-8 text-center text-red-500">Не удалось загрузить данные</div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// --- Inspection Checklist Components ---
+
+function InspectionChecklistEditor({
+  checklist,
+  onChange,
+}: {
+  checklist: InspectionChecklist;
+  onChange: (c: InspectionChecklist) => void;
+}) {
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  function toggleGroup(key: string) {
+    setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  function toggleItem(itemKey: string) {
+    onChange({
+      ...checklist,
+      [itemKey]: { ...checklist[itemKey], checked: !checklist[itemKey]?.checked },
+    });
+  }
+
+  function setNote(itemKey: string, note: string) {
+    onChange({
+      ...checklist,
+      [itemKey]: { ...checklist[itemKey], note },
+    });
+  }
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-600">Лист осмотра</label>
+      <div className="mt-1 space-y-1">
+        {INSPECTION_GROUPS.map((group) => {
+          const expanded = expandedGroups[group.key] ?? false;
+          const checkedCount = group.items.filter((i) => checklist[i.key]?.checked).length;
+          return (
+            <div key={group.key} className="rounded-lg border border-gray-200">
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.key)}
+                className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-gray-50"
+              >
+                <span className="text-xs font-semibold text-gray-700">{group.label}</span>
+                <span className="text-[11px] text-gray-400">
+                  {checkedCount}/{group.items.length} {expanded ? '\u25B2' : '\u25BC'}
+                </span>
+              </button>
+              {expanded && (
+                <div className="border-t border-gray-100 px-3 py-2 space-y-1.5">
+                  {group.items.map((item) => {
+                    const entry = checklist[item.key] || { checked: false, note: '' };
+                    return (
+                      <div key={item.key} className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={entry.checked}
+                          onChange={() => toggleItem(item.key)}
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs text-gray-700">{item.label}</span>
+                          <input
+                            type="text"
+                            value={entry.note}
+                            onChange={(e) => setNote(item.key, e.target.value)}
+                            placeholder="Комментарий..."
+                            className="mt-0.5 block w-full rounded border border-gray-200 px-2 py-1 text-[11px] text-gray-600 placeholder:text-gray-300 focus:border-primary-400 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

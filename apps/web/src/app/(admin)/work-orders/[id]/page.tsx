@@ -5,6 +5,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import {
+  INSPECTION_GROUPS,
+  createEmptyChecklist,
+  type InspectionChecklist,
+} from '@sto-crm/shared';
 
 interface WorkOrderItem {
   id: string;
@@ -30,6 +35,7 @@ interface WorkOrderDetail {
   status: string;
   clientComplaints: string | null;
   diagnosticNotes: string | null;
+  inspectionChecklist: InspectionChecklist | null;
   mileageAtIntake: number | null;
   fuelLevel: string | null;
   totalLabor: string | number;
@@ -237,14 +243,7 @@ export default function WorkOrderDetailPage() {
               fetchUrl="/users?limit=100&sort=firstName&order=asc&role=RECEPTIONIST"
               onAssign={(userId) => updateFieldMutation.mutate({ advisorId: userId || null })}
             />
-            <AssignField
-              label="Пост"
-              currentValue={wo.serviceBay?.name || null}
-              fetchUrl="/service-bays?isActive=true&limit=50"
-              fieldType="bay"
-              onAssign={(bayId) => updateFieldMutation.mutate({ serviceBayId: bayId || null })}
-            />
-            {wo.mileageAtIntake != null && (
+{wo.mileageAtIntake != null && (
               <div className="flex justify-between">
                 <span className="text-gray-500">Пробег</span>
                 <span className="text-gray-900">{wo.mileageAtIntake.toLocaleString('ru-RU')} км</span>
@@ -283,21 +282,20 @@ export default function WorkOrderDetailPage() {
         </div>
       </div>
 
-      {/* Complaints / Diagnostics */}
-      {(wo.clientComplaints || wo.diagnosticNotes) && (
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          {wo.clientComplaints && (
-            <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <h3 className="text-sm font-semibold uppercase text-gray-500">Жалобы клиента</h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{wo.clientComplaints}</p>
-            </div>
-          )}
-          {wo.diagnosticNotes && (
-            <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <h3 className="text-sm font-semibold uppercase text-gray-500">Диагностика</h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{wo.diagnosticNotes}</p>
-            </div>
-          )}
+      {/* Complaints */}
+      {wo.clientComplaints && (
+        <div className="mt-6">
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <h3 className="text-sm font-semibold uppercase text-gray-500">Жалобы клиента</h3>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{wo.clientComplaints}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Inspection Checklist */}
+      {wo.inspectionChecklist && (
+        <div className="mt-6">
+          <InspectionChecklistReadonly checklist={wo.inspectionChecklist} />
         </div>
       )}
 
@@ -838,6 +836,61 @@ function AssignField({
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
         </svg>
       </button>
+    </div>
+  );
+}
+
+function InspectionChecklistReadonly({ checklist }: { checklist: InspectionChecklist }) {
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  function toggleGroup(key: string) {
+    setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  const merged = { ...createEmptyChecklist(), ...checklist };
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <h3 className="text-sm font-semibold uppercase text-gray-500">Лист осмотра</h3>
+      <div className="mt-3 space-y-2">
+        {INSPECTION_GROUPS.map((group) => {
+          const expanded = expandedGroups[group.key] ?? false;
+          const checkedCount = group.items.filter((i) => merged[i.key]?.checked).length;
+          return (
+            <div key={group.key} className="rounded-lg border border-gray-100">
+              <button
+                onClick={() => toggleGroup(group.key)}
+                className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-gray-50"
+              >
+                <span className="text-sm font-medium text-gray-700">{group.label}</span>
+                <span className="text-xs text-gray-400">
+                  {checkedCount}/{group.items.length} {expanded ? '\u25B2' : '\u25BC'}
+                </span>
+              </button>
+              {expanded && (
+                <div className="border-t border-gray-50 px-3 py-2 space-y-1">
+                  {group.items.map((item) => {
+                    const entry = merged[item.key];
+                    return (
+                      <div key={item.key} className="flex items-start gap-2 py-0.5">
+                        <span className={`mt-0.5 inline-block h-4 w-4 flex-shrink-0 rounded text-center text-xs leading-4 ${entry?.checked ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                          {entry?.checked ? '\u2713' : ''}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-sm ${entry?.checked ? 'text-gray-900' : 'text-gray-500'}`}>{item.label}</span>
+                          {entry?.note && (
+                            <p className="text-xs text-gray-500 italic">{entry.note}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

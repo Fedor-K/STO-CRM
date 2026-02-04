@@ -280,6 +280,7 @@ export class WorkOrdersService {
       serviceBayId?: string;
       clientComplaints?: string;
       diagnosticNotes?: string;
+      inspectionChecklist?: any;
     },
   ): Promise<any> {
     await this.findById(tenantId, id);

@@ -295,6 +295,7 @@ model WorkOrder {
   status           WorkOrderStatus @default(NEW)
   clientComplaints String?
   diagnosticNotes  String?
+  inspectionChecklist Json?
   totalLabor       Decimal         @default(0) @db.Decimal(12, 2)
   totalParts       Decimal         @default(0) @db.Decimal(12, 2)
   totalAmount      Decimal         @default(0) @db.Decimal(12, 2)
