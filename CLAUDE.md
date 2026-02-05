@@ -82,6 +82,24 @@ docker/            — Dockerfile'ы и docker-compose
 - **SSH:** `ssh root@178.72.139.156` (ключ Lucinda)
 - **Стек на сервере:** Docker Compose (PostgreSQL + Redis + API + Web + Nginx)
 - **Файлы:** Selectel S3
+- **CI/CD:** GitHub Actions — автодеплой при пуше в main
+
+## Бэкапы
+
+- **Хранилище:** Selectel S3 (`stocrm.backups`, ru-3, холодный класс)
+- **Расписание:** Ежедневно в 3:00 UTC (6:00 МСК)
+- **Ротация:** daily/ — последние 7 дней, weekly/ — воскресные бэкапы
+- **Скрипты:** `scripts/backup.sh`, `scripts/restore.sh`
+- **Логи:** `/var/log/stocrm-backup.log`
+
+```bash
+# Ручной бэкап
+ssh root@178.72.139.156 "/opt/STO-CRM/scripts/backup.sh"
+
+# Список бэкапов и восстановление
+ssh root@178.72.139.156 "/opt/STO-CRM/scripts/restore.sh"
+ssh root@178.72.139.156 "/opt/STO-CRM/scripts/restore.sh daily/stocrm_2026-02-05_09-14.sql.gz"
+```
 
 ## Юридические требования (РФ)
 

@@ -11,6 +11,8 @@ dist/
 .env
 .env.local
 .env.*.local
+*.local
+S3_CREDENTIALS*
 
 # IDE
 .vscode/
