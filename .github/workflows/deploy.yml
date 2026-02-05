@@ -17,7 +17,13 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd /opt/STO-CRM
-            git pull origin main
+
+            # Force sync with remote (git pull can fail on conflicts)
+            git fetch origin
+            git reset --hard origin/main
+
+            echo "Deploying commit: $(git log -1 --oneline)"
+
             cd docker
             docker compose -f docker-compose.prod.yml up -d --build
 
