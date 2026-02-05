@@ -19,7 +19,6 @@ export const createWorkOrderSchema = z.object({
   advisorId: z.string().uuid().optional(),
   mechanicId: z.string().uuid().optional(),
   repairTypeId: z.string().uuid().optional(),
-  serviceBayId: z.string().uuid().optional(),
   appointmentId: z.string().uuid().optional(),
   clientComplaints: z.string().optional(),
   mileageAtIntake: z.number().int().min(0).optional(),
@@ -30,7 +29,6 @@ export const updateWorkOrderSchema = z.object({
   mechanicId: z.string().uuid().optional(),
   advisorId: z.string().uuid().optional(),
   repairTypeId: z.string().uuid().optional(),
-  serviceBayId: z.string().uuid().optional(),
   clientComplaints: z.string().optional(),
   diagnosticNotes: z.string().optional(),
 });
@@ -47,6 +45,7 @@ export const createWorkOrderItemSchema = z.object({
   normHours: z.number().min(0).optional(),
   serviceId: z.string().uuid().optional(),
   partId: z.string().uuid().optional(),
+  recommended: z.boolean().optional(),
 });
 
 export type CreateWorkOrderInput = z.infer<typeof createWorkOrderSchema>;

@@ -14,7 +14,6 @@ interface WorkOrderCard {
   createdAt: string;
   client: { id: string; firstName: string; lastName: string; phone: string | null };
   vehicle: { id: string; make: string; model: string; licensePlate: string | null };
-  serviceBay: { id: string; name: string } | null;
   _count: { items: number };
 }
 
@@ -89,9 +88,6 @@ export default function MyWorkOrdersPage() {
                   {wo.vehicle.make} {wo.vehicle.model}
                   {wo.vehicle.licensePlate ? ` • ${wo.vehicle.licensePlate}` : ''}
                 </div>
-                {wo.serviceBay && (
-                  <div className="mt-1 text-xs text-gray-500">Пост: {wo.serviceBay.name}</div>
-                )}
                 {wo.clientComplaints && (
                   <div className="mt-1 line-clamp-2 text-xs text-gray-400">{wo.clientComplaints}</div>
                 )}

@@ -17,7 +17,6 @@ interface WorkOrderCard {
   client: { id: string; firstName: string; lastName: string; phone: string | null };
   mechanic: { id: string; firstName: string; lastName: string } | null;
   vehicle: { id: string; make: string; model: string; licensePlate: string | null };
-  serviceBay: { id: string; name: string } | null;
   _count: { items: number };
 }
 
@@ -212,7 +211,6 @@ function CreateWorkOrderModal({
   const [clientId, setClientId] = useState('');
   const [vehicleId, setVehicleId] = useState('');
   const [mechanicId, setMechanicId] = useState('');
-  const [serviceBayId, setServiceBayId] = useState('');
   const [clientComplaints, setClientComplaints] = useState('');
   const [mileageAtIntake, setMileageAtIntake] = useState('');
   const [fuelLevel, setFuelLevel] = useState('');
@@ -235,11 +233,6 @@ function CreateWorkOrderModal({
     queryFn: () => apiFetch('/users?limit=100&sort=firstName&order=asc&role=MECHANIC'),
   });
 
-  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
-    queryKey: ['bays-for-wo'],
-    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
-  });
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -255,7 +248,6 @@ function CreateWorkOrderModal({
           clientId,
           vehicleId,
           mechanicId: mechanicId || undefined,
-          serviceBayId: serviceBayId || undefined,
           clientComplaints: clientComplaints || undefined,
           mileageAtIntake: mileageAtIntake ? Number(mileageAtIntake) : undefined,
           fuelLevel: fuelLevel || undefined,
@@ -309,33 +301,18 @@ function CreateWorkOrderModal({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Механик</label>
-              <select
-                value={mechanicId}
-                onChange={(e) => setMechanicId(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              >
-                <option value="">Не назначен</option>
-                {mechanics?.data?.map((m) => (
-                  <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Рабочий пост</label>
-              <select
-                value={serviceBayId}
-                onChange={(e) => setServiceBayId(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              >
-                <option value="">Не выбран</option>
-                {bays?.data?.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Механик</label>
+            <select
+              value={mechanicId}
+              onChange={(e) => setMechanicId(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+            >
+              <option value="">Не назначен</option>
+              {mechanics?.data?.map((m) => (
+                <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+              ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

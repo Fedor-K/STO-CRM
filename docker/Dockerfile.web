@@ -9,13 +9,18 @@ COPY apps/web/package.json ./apps/web/
 COPY packages/shared/package.json ./packages/shared/
 RUN pnpm install --frozen-lockfile
 
-# Build
-FROM deps AS build
+# Build shared first
+FROM deps AS build-shared
 COPY packages/shared ./packages/shared
-COPY apps/web ./apps/web
 COPY tsconfig.base.json ./
+RUN pnpm --filter @sto-crm/shared build
+
+# Build web
+FROM build-shared AS build
+COPY apps/web ./apps/web
 
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_PUBLIC_API_URL=/api/v1
 RUN pnpm --filter @sto-crm/web build
 
 # Production
@@ -25,14 +30,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# Copy standalone server
+COPY --from=build /app/apps/web/.next/standalone ./
 
-COPY --from=build /app/apps/web/public ./public
-COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
-COPY --from=build --chown=nextjs:nodejs /app/apps/web/.next/static ./.next/static
+# Copy static files to correct location
+COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
 
-USER nextjs
+# Copy public folder
+COPY --from=build /app/apps/web/public ./apps/web/public
+
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["node", "apps/web/server.js"]

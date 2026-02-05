@@ -29,7 +29,6 @@ interface Appointment {
   status: string;
   notes: string | null;
   vehicle: { make: string; model: string; licensePlate: string | null };
-  serviceBay: { name: string } | null;
 }
 
 export default function MyAppointmentsPage() {

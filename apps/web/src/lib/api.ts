@@ -58,7 +58,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
       }
 
       const retryText = await retryRes.text();
-      return retryText ? JSON.parse(retryText) : null;
+      return (retryText ? JSON.parse(retryText) : null) as T;
     }
 
     // Refresh не удался — разлогиниваем
@@ -73,7 +73,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   }
 
   const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 export { ApiError };

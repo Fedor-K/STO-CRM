@@ -6,7 +6,6 @@ export const createAppointmentSchema = z.object({
   clientId: z.string().uuid(),
   vehicleId: z.string().uuid(),
   advisorId: z.string().uuid().optional(),
-  serviceBayId: z.string().uuid().optional(),
   source: z.string().optional(),
   adChannel: z.string().optional(),
   notes: z.string().optional(),
@@ -16,7 +15,6 @@ export const updateAppointmentSchema = z.object({
   scheduledStart: z.string().datetime().optional(),
   scheduledEnd: z.string().datetime().optional(),
   advisorId: z.string().uuid().optional(),
-  serviceBayId: z.string().uuid().optional(),
   notes: z.string().optional(),
 });
 

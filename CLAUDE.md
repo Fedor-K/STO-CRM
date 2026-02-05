@@ -31,7 +31,6 @@ docker/            — Dockerfile'ы и docker-compose
 | `/work-orders` | `app/(admin)/work-orders/page.tsx` | Заказ-наряды |
 | `/vehicles` | `app/(admin)/vehicles/page.tsx` | Автомобили |
 | `/services` | `app/(admin)/services/page.tsx` | Услуги |
-| `/service-bays` | `app/(admin)/service-bays/page.tsx` | Посты обслуживания |
 | `/inventory` | `app/(admin)/inventory/page.tsx` | Склад |
 | `/finance` | `app/(admin)/finance/page.tsx` | Финансы |
 | `/users` | `app/(admin)/users/page.tsx` | Пользователи |

@@ -13,7 +13,6 @@ interface WorkOrder {
   createdAt: string;
   vehicle: { id: string; make: string; model: string; licensePlate: string | null };
   mechanic: { id: string; firstName: string; lastName: string } | null;
-  serviceBay: { id: string; name: string } | null;
   _count: { items: number };
 }
 

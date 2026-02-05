@@ -143,18 +143,6 @@ async function main() {
   }
   console.log('  Виды ремонта: 3');
 
-  // Рабочие посты
-  const bayData = [
-    { name: 'Пост №1 — Подъёмник', type: 'lift' },
-    { name: 'Пост №2 — Подъёмник', type: 'lift' },
-    { name: 'Пост №3 — Яма', type: 'pit' },
-    { name: 'Диагностика', type: 'diagnostic' },
-  ];
-  for (const b of bayData) {
-    await findOrCreate(prisma.serviceBay, { name: b.name, tenantId: tenant.id }, b);
-  }
-  console.log('  Рабочие посты: 4');
-
   // Каталог услуг
   const serviceData = [
     { name: 'Замена масла и фильтра', price: 2500, estimatedMinutes: 30, normHours: 0.5 },

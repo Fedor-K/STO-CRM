@@ -34,7 +34,6 @@ interface AppointmentData {
   status: string;
   notes: string | null;
   vehicle: { make: string; model: string; licensePlate: string | null };
-  serviceBay: { name: string } | null;
 }
 
 interface WorkOrderData {
@@ -401,7 +400,6 @@ function ClientCard({
                         {a.vehicle.make} {a.vehicle.model}
                         {a.vehicle.licensePlate ? ` (${a.vehicle.licensePlate})` : ''}
                       </span>
-                      {a.serviceBay && <span className="ml-2 text-gray-400">{a.serviceBay.name}</span>}
                     </div>
                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                       a.status === 'CANCELLED' || a.status === 'NO_SHOW' ? 'bg-red-100 text-red-600' :
@@ -702,7 +700,6 @@ interface AppointmentDetail {
   client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
-  serviceBay: { id: string; name: string; type: string | null } | null;
 }
 
 function AppointmentDetailModal({
@@ -723,18 +720,12 @@ function AppointmentDetailModal({
     staleTime: 0,
   });
 
-  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
-    queryKey: ['bays-modal'],
-    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
-  });
-
   const { data: advisors } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
     queryKey: ['advisors-modal'],
     queryFn: () => apiFetch('/users?limit=50&role=RECEPTIONIST'),
   });
 
   const [notes, setNotes] = useState('');
-  const [serviceBayId, setServiceBayId] = useState('');
   const [advisorId, setAdvisorId] = useState('');
   const [date, setDate] = useState('');
   const [startTime, setStartTime] = useState('');
@@ -743,7 +734,6 @@ function AppointmentDetailModal({
 
   if (appointment && !initialized) {
     setNotes(appointment.notes || '');
-    setServiceBayId(appointment.serviceBay?.id || '');
     setAdvisorId(appointment.advisor?.id || '');
     const start = new Date(appointment.scheduledStart);
     const end = new Date(appointment.scheduledEnd);
@@ -763,7 +753,6 @@ function AppointmentDetailModal({
         method: 'PATCH',
         body: JSON.stringify({
           notes: notes || null,
-          serviceBayId: serviceBayId || null,
           advisorId: advisorId || null,
           scheduledStart: `${date}T${startTime}:00`,
           scheduledEnd: `${date}T${endTime}:00`,
@@ -838,16 +827,6 @@ function AppointmentDetailModal({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-600">Рабочий пост</label>
-                  <select value={serviceBayId} onChange={(e) => setServiceBayId(e.target.value)} className={inputCls}>
-                    <option value="">Не выбран</option>
-                    {bays?.data?.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
                   <label className="block text-xs font-medium text-gray-600">Приёмщик</label>
                   <select value={advisorId} onChange={(e) => setAdvisorId(e.target.value)} className={inputCls}>
                     <option value="">Не назначен</option>
@@ -887,9 +866,6 @@ function AppointmentDetailModal({
                     <span className="font-medium text-gray-700">{date}</span>{' '}
                     {startTime} – {endTime}
                   </div>
-                  {appointment.serviceBay && (
-                    <div className="text-xs text-gray-500">Пост: <span className="font-medium text-gray-700">{appointment.serviceBay.name}</span></div>
-                  )}
                   {appointment.advisor && (
                     <div className="text-xs text-gray-500">Приёмщик: <span className="font-medium text-gray-700">{appointment.advisor.firstName} {appointment.advisor.lastName}</span></div>
                   )}
@@ -927,7 +903,6 @@ interface WorkOrderDetail {
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   mechanic: { id: string; firstName: string; lastName: string } | null;
-  serviceBay: { id: string; name: string; type: string | null } | null;
   items: {
     id: string;
     type: string;
@@ -970,15 +945,9 @@ function WorkOrderDetailModal({
     queryFn: () => apiFetch('/users?limit=50&role=MECHANIC'),
   });
 
-  const { data: bays } = useQuery<{ data: { id: string; name: string; type: string | null }[] }>({
-    queryKey: ['bays-modal'],
-    queryFn: () => apiFetch('/service-bays?isActive=true&limit=50'),
-  });
-
   const [complaints, setComplaints] = useState('');
   const [diagNotes, setDiagNotes] = useState('');
   const [mechanicId, setMechanicId] = useState('');
-  const [serviceBayId, setServiceBayId] = useState('');
   const [initialized, setInitialized] = useState(false);
 
   const [showAddItem, setShowAddItem] = useState(false);
@@ -991,7 +960,6 @@ function WorkOrderDetailModal({
     setComplaints(wo.clientComplaints || '');
     setDiagNotes(wo.diagnosticNotes || '');
     setMechanicId(wo.mechanic?.id || '');
-    setServiceBayId(wo.serviceBay?.id || '');
     setInitialized(true);
   }
 
@@ -1008,7 +976,6 @@ function WorkOrderDetailModal({
           clientComplaints: complaints || null,
           diagnosticNotes: diagNotes || null,
           mechanicId: mechanicId || null,
-          serviceBayId: serviceBayId || null,
         }),
       });
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
@@ -1127,25 +1094,14 @@ function WorkOrderDetailModal({
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600">Механик</label>
-                    <select value={mechanicId} onChange={(e) => setMechanicId(e.target.value)} className={inputCls}>
-                      <option value="">Не назначен</option>
-                      {mechanics?.data?.map((m) => (
-                        <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600">Рабочий пост</label>
-                    <select value={serviceBayId} onChange={(e) => setServiceBayId(e.target.value)} className={inputCls}>
-                      <option value="">Не выбран</option>
-                      {bays?.data?.map((b) => (
-                        <option key={b.id} value={b.id}>{b.name}{b.type ? ` (${b.type})` : ''}</option>
-                      ))}
-                    </select>
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">Механик</label>
+                  <select value={mechanicId} onChange={(e) => setMechanicId(e.target.value)} className={inputCls}>
+                    <option value="">Не назначен</option>
+                    {mechanics?.data?.map((m) => (
+                      <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                    ))}
+                  </select>
                 </div>
               </>
             )}

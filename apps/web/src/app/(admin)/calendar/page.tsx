@@ -15,7 +15,6 @@ interface AppointmentData {
   client: { id: string; firstName: string; lastName: string; phone: string | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null };
-  serviceBay: { id: string; name: string; type: string | null } | null;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -450,13 +449,6 @@ function AppointmentDetailModal({
               <span className="ml-2 font-mono text-sm text-gray-500">{appointment.vehicle.licensePlate}</span>
             )}
           </div>
-
-          {appointment.serviceBay && (
-            <div>
-              <span className="text-sm text-gray-500">Пост:</span>
-              <span className="ml-2 text-sm font-medium text-gray-900">{appointment.serviceBay.name}</span>
-            </div>
-          )}
 
           {appointment.advisor && (
             <div>

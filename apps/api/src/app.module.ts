@@ -7,7 +7,6 @@ import { AuthModule } from './modules/auth/auth.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { UsersModule } from './modules/users/users.module';
 import { ServicesModule } from './modules/services/services.module';
-import { ServiceBaysModule } from './modules/service-bays/service-bays.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { AppointmentsModule } from './modules/appointments/appointments.module';
 import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
@@ -28,7 +27,6 @@ import { TenantScopeInterceptor } from './common/interceptors/tenant-scope.inter
     TenantsModule,
     UsersModule,
     ServicesModule,
-    ServiceBaysModule,
     VehiclesModule,
     AppointmentsModule,
     WorkOrdersModule,

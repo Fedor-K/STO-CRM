@@ -548,8 +548,8 @@ function CreateAppointmentModal({
   const { data: advisors } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
     queryKey: ['advisors-for-appt'],
     queryFn: async () => {
-      const res = await apiFetch('/users?limit=100&sort=firstName&order=asc');
-      return { data: res.data.filter((u: any) => ['OWNER', 'MANAGER', 'RECEPTIONIST'].includes(u.role)) };
+      const res = await apiFetch('/users?limit=100&sort=firstName&order=asc') as { data: { id: string; firstName: string; lastName: string; role: string }[] };
+      return { data: res.data.filter((u) => ['OWNER', 'MANAGER', 'RECEPTIONIST'].includes(u.role)) };
     },
   });
 
@@ -893,7 +893,6 @@ interface AppointmentDetail {
   client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
-  serviceBay: { id: string; name: string; type: string | null } | null;
   plannedItems: PlannedItem[] | null;
 }
 
@@ -931,8 +930,8 @@ function AppointmentDetailModal({
   const { data: advisors } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
     queryKey: ['advisors-modal'],
     queryFn: async () => {
-      const res = await apiFetch('/users?limit=100&sort=firstName&order=asc');
-      return { data: res.data.filter((u: any) => ['OWNER', 'MANAGER', 'RECEPTIONIST'].includes(u.role)) };
+      const res = await apiFetch('/users?limit=100&sort=firstName&order=asc') as { data: { id: string; firstName: string; lastName: string; role: string }[] };
+      return { data: res.data.filter((u) => ['OWNER', 'MANAGER', 'RECEPTIONIST'].includes(u.role)) };
     },
   });
 
@@ -1480,7 +1479,6 @@ interface WorkOrderDetail {
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   mechanic: { id: string; firstName: string; lastName: string } | null;
-  serviceBay: { id: string; name: string; type: string | null } | null;
   items: {
     id: string;
     type: string;
@@ -1489,6 +1487,8 @@ interface WorkOrderDetail {
     unitPrice: string | number;
     totalPrice: string | number;
     normHours: number | null;
+    recommended: boolean;
+    approvedByClient: boolean | null;
   }[];
   workLogs: {
     id: string;
@@ -1612,11 +1612,27 @@ function WorkOrderDetailModal({
           unitPrice: 2000,
           normHours,
           serviceId: svc.id,
+          recommended: true,
         }),
       });
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
     } catch (err: any) {
       setError(err.message || 'Ошибка добавления');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleApproveItem(itemId: string, approved: boolean) {
+    setSaving(true);
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items/${itemId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ approvedByClient: approved }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка согласования');
     } finally {
       setSaving(false);
     }
@@ -1778,30 +1794,51 @@ function WorkOrderDetailModal({
             )}
 
             {/* Items — collapsible with tabs */}
-            <ItemsSection
-              items={wo.items}
-              totalLabor={wo.totalLabor}
-              totalParts={wo.totalParts}
-              totalAmount={wo.totalAmount}
-              isEditable={!!isEditable}
-              showAddItem={showAddItem}
-              setShowAddItem={setShowAddItem}
-              addItemTab={addItemTab}
-              setAddItemTab={setAddItemTab}
-              services={services?.data || []}
-              parts={parts?.data || []}
-              selectedServiceId={selectedServiceId}
-              setSelectedServiceId={setSelectedServiceId}
-              selectedPartId={selectedPartId}
-              setSelectedPartId={setSelectedPartId}
-              partQty={partQty}
-              setPartQty={setPartQty}
-              saving={saving}
-              onAddLabor={handleAddLabor}
-              onAddPart={handleAddPart}
-              onDeleteItem={handleDeleteItem}
-              onUpdateItem={handleUpdateItem}
-            />
+            {(() => {
+              const regularItems = wo.items.filter((i) => !i.recommended);
+              const recommendedItems = wo.items.filter((i) => i.recommended);
+              const regularTotal = regularItems.reduce((sum, i) => sum + Number(i.totalPrice), 0);
+              const regularLabor = regularItems.filter((i) => i.type === 'LABOR').reduce((sum, i) => sum + Number(i.totalPrice), 0);
+              const regularParts = regularItems.filter((i) => i.type === 'PART').reduce((sum, i) => sum + Number(i.totalPrice), 0);
+              return (
+                <>
+                  <ItemsSection
+                    items={regularItems}
+                    totalLabor={regularLabor}
+                    totalParts={regularParts}
+                    totalAmount={regularTotal}
+                    isEditable={!!isEditable}
+                    showAddItem={showAddItem}
+                    setShowAddItem={setShowAddItem}
+                    addItemTab={addItemTab}
+                    setAddItemTab={setAddItemTab}
+                    services={services?.data || []}
+                    parts={parts?.data || []}
+                    selectedServiceId={selectedServiceId}
+                    setSelectedServiceId={setSelectedServiceId}
+                    selectedPartId={selectedPartId}
+                    setSelectedPartId={setSelectedPartId}
+                    partQty={partQty}
+                    setPartQty={setPartQty}
+                    saving={saving}
+                    onAddLabor={handleAddLabor}
+                    onAddPart={handleAddPart}
+                    onDeleteItem={handleDeleteItem}
+                    onUpdateItem={handleUpdateItem}
+                  />
+
+                  {recommendedItems.length > 0 && (
+                    <RecommendedSection
+                      items={recommendedItems}
+                      status={wo.status}
+                      saving={saving}
+                      onApproveItem={handleApproveItem}
+                      onDeleteItem={handleDeleteItem}
+                    />
+                  )}
+                </>
+              );
+            })()}
 
             {/* Work logs */}
             {wo.workLogs.length > 0 && (
@@ -2183,7 +2220,7 @@ function ItemsSection({
   onDeleteItem,
   onUpdateItem,
 }: {
-  items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null }[];
+  items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; recommended: boolean; approvedByClient: boolean | null }[];
   totalLabor: string | number;
   totalParts: string | number;
   totalAmount: string | number;
@@ -2446,6 +2483,126 @@ function ItemsSection({
             </div>
             <div className="text-sm font-bold text-gray-900">
               Итого: {formatMoney(totalAmount)}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecommendedSection({
+  items,
+  status,
+  saving,
+  onApproveItem,
+  onDeleteItem,
+}: {
+  items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; recommended: boolean; approvedByClient: boolean | null }[];
+  status: string;
+  saving: boolean;
+  onApproveItem: (itemId: string, approved: boolean) => void;
+  onDeleteItem: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const canApprove = ['DIAGNOSED', 'APPROVED'].includes(status);
+
+  const approvedTotal = items
+    .filter((i) => i.approvedByClient !== false)
+    .reduce((sum, i) => sum + Number(i.totalPrice), 0);
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50">
+      {/* Header */}
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-amber-100/50"
+      >
+        <span className="text-sm font-semibold text-amber-800">
+          Рекомендовано ({items.length})
+        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-amber-900">{formatMoney(approvedTotal)}</span>
+          <span className="text-xs text-amber-400">{expanded ? '\u25B2' : '\u25BC'}</span>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-amber-200">
+          <div className="px-3 py-2 space-y-1">
+            {items.map((item) => {
+              const isApproved = item.approvedByClient === true;
+              const isDeclined = item.approvedByClient === false;
+
+              return (
+                <div
+                  key={item.id}
+                  className={`flex items-center justify-between rounded px-3 py-2 text-xs ${
+                    isDeclined
+                      ? 'bg-red-50 text-gray-400 line-through'
+                      : isApproved
+                        ? 'bg-green-50 text-gray-700'
+                        : 'bg-white text-gray-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {isApproved && <span className="text-green-600 text-sm">{'\u2713'}</span>}
+                    {isDeclined && <span className="text-red-500 text-sm">{'\u2717'}</span>}
+                    {!isApproved && !isDeclined && <span className="text-amber-400 text-sm">{'\u25CF'}</span>}
+                    <span className="truncate">{item.description}</span>
+                    <span className="text-gray-400 shrink-0">
+                      {item.type === 'LABOR' ? `${item.quantity} н/ч` : `\u00D7${item.quantity}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    <span className="font-medium">{formatMoney(item.totalPrice)}</span>
+                    {canApprove && (
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          disabled={saving || isApproved}
+                          onClick={() => onApproveItem(item.id, true)}
+                          className={`rounded px-1.5 py-0.5 text-xs font-medium transition-colors ${
+                            isApproved
+                              ? 'bg-green-200 text-green-800 cursor-default'
+                              : 'bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50'
+                          }`}
+                          title="Одобрить"
+                        >
+                          {'\u2713'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saving || isDeclined}
+                          onClick={() => onApproveItem(item.id, false)}
+                          className={`rounded px-1.5 py-0.5 text-xs font-medium transition-colors ${
+                            isDeclined
+                              ? 'bg-red-200 text-red-800 cursor-default'
+                              : 'bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50'
+                          }`}
+                          title="Отклонить"
+                        >
+                          {'\u2717'}
+                        </button>
+                      </div>
+                    )}
+                    {!canApprove && !isApproved && !isDeclined && (
+                      <span className="text-amber-500 text-[10px]">ожидание</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div className="flex justify-end gap-4 border-t border-amber-200 px-4 py-2">
+            <div className="text-xs text-amber-700">
+              Одобрено: <span className="font-semibold">{items.filter((i) => i.approvedByClient === true).length} из {items.length}</span>
+            </div>
+            <div className="text-sm font-bold text-amber-900">
+              Сумма: {formatMoney(approvedTotal)}
             </div>
           </div>
         </div>

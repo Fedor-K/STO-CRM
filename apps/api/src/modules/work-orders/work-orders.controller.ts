@@ -16,6 +16,7 @@ import {
   IsUUID,
   IsNumber,
   IsObject,
+  IsBoolean,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -43,9 +44,6 @@ class CreateWorkOrderDto {
   repairTypeId?: string;
 
   @IsOptional() @IsUUID()
-  serviceBayId?: string;
-
-  @IsOptional() @IsUUID()
   appointmentId?: string;
 
   @IsOptional() @IsString()
@@ -67,9 +65,6 @@ class UpdateWorkOrderDto {
 
   @IsOptional() @IsUUID()
   repairTypeId?: string;
-
-  @IsOptional() @IsUUID()
-  serviceBayId?: string;
 
   @IsOptional() @IsString()
   clientComplaints?: string;
@@ -108,6 +103,9 @@ class CreateItemDto {
 
   @IsOptional() @IsUUID()
   partId?: string;
+
+  @IsOptional() @IsBoolean()
+  recommended?: boolean;
 }
 
 class UpdateItemDto {
@@ -122,6 +120,9 @@ class UpdateItemDto {
 
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0)
   normHours?: number;
+
+  @IsOptional() @IsBoolean()
+  approvedByClient?: boolean;
 }
 
 class CreateWorkLogDto {

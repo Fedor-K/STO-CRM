@@ -47,7 +47,6 @@ interface WorkOrderDetail {
   advisor: { id: string; firstName: string; lastName: string } | null;
   mechanic: { id: string; firstName: string; lastName: string } | null;
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null };
-  serviceBay: { id: string; name: string; type: string | null } | null;
   items: WorkOrderItem[];
   workLogs: WorkLogEntry[];
 }

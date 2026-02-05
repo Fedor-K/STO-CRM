@@ -24,10 +24,6 @@ class CreateAppointmentDto {
   advisorId?: string;
 
   @IsOptional()
-  @IsUUID()
-  serviceBayId?: string;
-
-  @IsOptional()
   @IsString()
   source?: string;
 
@@ -52,10 +48,6 @@ class UpdateAppointmentDto {
   @IsOptional()
   @IsUUID()
   advisorId?: string;
-
-  @IsOptional()
-  @IsUUID()
-  serviceBayId?: string;
 
   @IsOptional()
   @IsString()
@@ -104,10 +96,9 @@ export class AppointmentsController {
   @ApiQuery({ name: 'clientId', required: false })
   @ApiQuery({ name: 'from', required: false, description: 'ISO date' })
   @ApiQuery({ name: 'to', required: false, description: 'ISO date' })
-  @ApiQuery({ name: 'serviceBayId', required: false })
   findAll(
     @CurrentTenant() tenantId: string,
-    @Query() query: PaginationDto & { status?: AppointmentStatus; clientId?: string; from?: string; to?: string; serviceBayId?: string },
+    @Query() query: PaginationDto & { status?: AppointmentStatus; clientId?: string; from?: string; to?: string },
   ) {
     return this.appointmentsService.findAll(tenantId, {
       page: Number(query.page) || 1,
@@ -118,24 +109,6 @@ export class AppointmentsController {
       clientId: query.clientId,
       from: query.from,
       to: query.to,
-      serviceBayId: query.serviceBayId,
-    });
-  }
-
-  @Get('available-slots')
-  @Roles('appointments:read')
-  @ApiOperation({ summary: 'Свободные слоты' })
-  @ApiQuery({ name: 'date', required: true, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'durationMinutes', required: true })
-  @ApiQuery({ name: 'serviceBayId', required: false })
-  getAvailableSlots(
-    @CurrentTenant() tenantId: string,
-    @Query() query: { date: string; durationMinutes: string; serviceBayId?: string },
-  ) {
-    return this.appointmentsService.getAvailableSlots(tenantId, {
-      date: query.date,
-      durationMinutes: Number(query.durationMinutes) || 60,
-      serviceBayId: query.serviceBayId,
     });
   }
 

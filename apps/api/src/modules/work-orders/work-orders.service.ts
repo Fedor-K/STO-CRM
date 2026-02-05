@@ -34,7 +34,6 @@ const workOrderInclude = {
   advisor: { select: { id: true, firstName: true, lastName: true } },
   mechanic: { select: { id: true, firstName: true, lastName: true } },
   vehicle: { select: { id: true, make: true, model: true, licensePlate: true, year: true, vin: true } },
-  serviceBay: { select: { id: true, name: true, type: true } },
   items: {
     orderBy: { createdAt: 'asc' as const },
   },
@@ -50,7 +49,6 @@ const workOrderListInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true } },
   mechanic: { select: { id: true, firstName: true, lastName: true } },
   vehicle: { select: { id: true, make: true, model: true, licensePlate: true } },
-  serviceBay: { select: { id: true, name: true } },
   _count: { select: { items: true } },
 };
 
@@ -163,7 +161,6 @@ export class WorkOrdersService {
       advisorId?: string;
       mechanicId?: string;
       repairTypeId?: string;
-      serviceBayId?: string;
       appointmentId?: string;
       clientComplaints?: string;
       mileageAtIntake?: number;
@@ -190,7 +187,6 @@ export class WorkOrdersService {
           advisorId: data.advisorId,
           mechanicId: data.mechanicId,
           repairTypeId: data.repairTypeId,
-          serviceBayId: data.serviceBayId,
           appointmentId: data.appointmentId,
           clientComplaints: data.clientComplaints,
           mileageAtIntake: data.mileageAtIntake,
@@ -215,7 +211,6 @@ export class WorkOrdersService {
       include: {
         client: true,
         vehicle: true,
-        serviceBay: true,
       },
     });
 
@@ -248,7 +243,6 @@ export class WorkOrdersService {
           clientId: appointment.clientId,
           vehicleId: appointment.vehicleId,
           advisorId: appointment.advisorId,
-          serviceBayId: appointment.serviceBayId,
           appointmentId: appointment.id,
           clientComplaints: appointment.notes,
           totalLabor: 0,
@@ -318,7 +312,6 @@ export class WorkOrdersService {
       mechanicId?: string;
       advisorId?: string;
       repairTypeId?: string;
-      serviceBayId?: string;
       clientComplaints?: string;
       diagnosticNotes?: string;
       inspectionChecklist?: any;
@@ -387,6 +380,7 @@ export class WorkOrdersService {
       normHours?: number;
       serviceId?: string;
       partId?: string;
+      recommended?: boolean;
     },
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
@@ -404,6 +398,7 @@ export class WorkOrdersService {
         normHours: data.normHours,
         serviceId: data.serviceId,
         partId: data.partId,
+        recommended: data.recommended ?? false,
       },
     });
 
@@ -420,6 +415,7 @@ export class WorkOrdersService {
       quantity?: number;
       unitPrice?: number;
       normHours?: number;
+      approvedByClient?: boolean;
     },
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
@@ -500,6 +496,7 @@ export class WorkOrdersService {
     let totalParts = 0;
 
     for (const item of items) {
+      if (item.approvedByClient === false) continue; // отклонённые не считаем
       const price = Number(item.totalPrice);
       if (item.type === 'LABOR') {
         totalLabor += price;
