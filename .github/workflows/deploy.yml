@@ -1,0 +1,30 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 178.72.139.156
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/STO-CRM
+            git pull origin main
+            cd docker
+            docker compose -f docker-compose.prod.yml up -d --build
+
+            # Apply migrations if any
+            docker exec stocrm-api npx prisma migrate deploy || true
+
+            # Cleanup old images
+            docker image prune -f
+
+            echo "Deploy completed at $(date)"
