@@ -13,6 +13,7 @@ export interface InspectionChecklistEntry {
   checked: boolean;
   note: string;
   level?: number; // 0-100, для жидкостей (масло, ОЖ и т.д.)
+  recommended?: boolean; // пункт добавлен как рекомендованная работа
 }
 
 export interface SliderConfig {

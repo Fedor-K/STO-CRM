@@ -2371,6 +2371,7 @@ function InspectionChecklistEditor({
         {INSPECTION_GROUPS.map((group) => {
           const expanded = expandedGroups[group.key] ?? false;
           const checkedCount = group.items.filter((i) => checklist[i.key]?.checked).length;
+          const recommendedCount = group.items.filter((i) => checklist[i.key]?.recommended).length;
           return (
             <div key={group.key} className="rounded-lg border border-gray-200">
               <button
@@ -2380,7 +2381,7 @@ function InspectionChecklistEditor({
               >
                 <span className="text-xs font-semibold text-gray-700">{group.label}</span>
                 <span className="text-[11px] text-gray-400">
-                  {checkedCount}/{group.items.length} {expanded ? '\u25B2' : '\u25BC'}
+                  {checkedCount}/{group.items.length}{recommendedCount > 0 && <span className="ml-1 text-amber-600 font-medium">+{recommendedCount} рек.</span>} {expanded ? '\u25B2' : '\u25BC'}
                 </span>
               </button>
               {expanded && (
@@ -2398,6 +2399,9 @@ function InspectionChecklistEditor({
                           />
                           <div className="flex-1 min-w-0">
                             <span className="text-xs text-gray-700">{item.label}</span>
+                            {entry.recommended && (
+                              <span className="ml-1.5 inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">● рек.</span>
+                            )}
                             {SLIDER_CONFIG[item.key] && (() => {
                               const cfg = SLIDER_CONFIG[item.key];
                               const val = entry.level ?? cfg.defaultValue;
@@ -2443,7 +2447,11 @@ function InspectionChecklistEditor({
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (suggestServiceId) {
+                                  if (suggestServiceId && suggestForItem) {
+                                    onChange({
+                                      ...checklist,
+                                      [suggestForItem]: { ...checklist[suggestForItem], recommended: true },
+                                    });
                                     onAddService(suggestServiceId);
                                     setSuggestForItem(null);
                                     setSuggestServiceId('');
