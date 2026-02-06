@@ -507,18 +507,24 @@ function WorkLogsTab({
     (i) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true),
   );
 
-  // Deduplicate by description
-  const uniqueLabor = laborItems.filter(
-    (item, idx, arr) => arr.findIndex((i) => i.description === item.description) === idx,
-  );
+  // Match work logs to items by description+index (handles duplicates)
+  const completedItemIds = new Set<string>();
+  const logByItemId = new Map<string, WorkLogEntry>();
+  const usedLogIds = new Set<string>();
 
-  // Check which descriptions have work logs
-  const completedDescriptions = new Set(
-    workOrder.workLogs.map((l) => l.description),
-  );
+  for (const item of laborItems) {
+    const log = workOrder.workLogs.find(
+      (l) => l.description === item.description && !usedLogIds.has(l.id),
+    );
+    if (log) {
+      completedItemIds.add(item.id);
+      logByItemId.set(item.id, log);
+      usedLogIds.add(log.id);
+    }
+  }
 
   async function handleToggle(item: WorkOrderItem) {
-    if (completedDescriptions.has(item.description)) return;
+    if (completedItemIds.has(item.id)) return;
     setCompleting(item.id);
     try {
       await apiFetch(`/work-orders/${workOrder.id}/work-logs`, {
@@ -536,13 +542,14 @@ function WorkLogsTab({
 
   return (
     <div className="mt-4">
-      {uniqueLabor.length === 0 ? (
+      {laborItems.length === 0 ? (
         <div className="py-8 text-center text-sm text-gray-500">Нет согласованных работ</div>
       ) : (
         <div className="space-y-2">
-          {uniqueLabor.map((item) => {
-            const done = completedDescriptions.has(item.description);
+          {laborItems.map((item) => {
+            const done = completedItemIds.has(item.id);
             const isLoading = completing === item.id;
+            const log = logByItemId.get(item.id);
             return (
               <div
                 key={item.id}
@@ -572,20 +579,17 @@ function WorkLogsTab({
                   <p className={`text-sm font-medium ${done ? 'text-green-700 line-through' : 'text-gray-900'}`}>
                     {item.description}
                   </p>
-                  {item.normHours && (
-                    <span className="text-xs text-gray-500">{Number(item.normHours)} н/ч</span>
-                  )}
+                  <span className="text-xs text-gray-500">
+                    {Number(item.quantity)} x {formatMoney(item.unitPrice)}
+                    {item.normHours ? ` \u00B7 ${Number(item.normHours)} н/ч` : ''}
+                  </span>
                 </div>
-                {done && (() => {
-                  const log = workOrder.workLogs.find((l) => l.description === item.description);
-                  if (!log) return null;
-                  return (
-                    <div className="text-right text-xs text-gray-500">
-                      <div>{log.mechanic.firstName} {log.mechanic.lastName}</div>
-                      <div>{formatDate(log.logDate)}</div>
-                    </div>
-                  );
-                })()}
+                {done && log && (
+                  <div className="text-right text-xs text-gray-500">
+                    <div>{log.mechanic.firstName} {log.mechanic.lastName}</div>
+                    <div>{formatDate(log.logDate)}</div>
+                  </div>
+                )}
               </div>
             );
           })}
