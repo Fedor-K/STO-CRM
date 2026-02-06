@@ -12,6 +12,8 @@ const userSelect = {
   role: true,
   firstName: true,
   lastName: true,
+  middleName: true,
+  dateOfBirth: true,
   phone: true,
   isActive: true,
   tenantId: true,
@@ -62,6 +64,8 @@ export class UsersService {
       role: UserRole;
       firstName: string;
       lastName: string;
+      middleName?: string;
+      dateOfBirth?: string;
       phone?: string;
     },
   ): Promise<UserWithoutPassword> {
@@ -79,6 +83,8 @@ export class UsersService {
         role: data.role,
         firstName: data.firstName,
         lastName: data.lastName,
+        middleName: data.middleName,
+        dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
         phone: data.phone,
         tenantId,
       },
@@ -96,6 +102,8 @@ export class UsersService {
       role?: UserRole;
       firstName?: string;
       lastName?: string;
+      middleName?: string;
+      dateOfBirth?: string;
       phone?: string;
       isActive?: boolean;
     },
@@ -109,9 +117,15 @@ export class UsersService {
       if (existing) throw new ConflictException('Пользователь с таким email уже существует');
     }
 
+    const { dateOfBirth, ...rest } = data;
+    const updateData: any = { ...rest };
+    if (dateOfBirth !== undefined) {
+      updateData.dateOfBirth = dateOfBirth ? new Date(dateOfBirth) : null;
+    }
+
     const user = await this.prisma.user.update({
       where: { id },
-      data,
+      data: updateData,
       select: userSelect,
     });
 

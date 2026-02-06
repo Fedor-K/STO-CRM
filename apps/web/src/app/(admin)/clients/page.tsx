@@ -11,6 +11,8 @@ interface ClientData {
   email: string;
   firstName: string;
   lastName: string;
+  middleName: string | null;
+  dateOfBirth: string | null;
   phone: string | null;
   isActive: boolean;
   createdAt: string;
@@ -205,7 +207,7 @@ export default function ClientsPage() {
                 onToggle={() => setExpandedId(expandedId === client.id ? null : client.id)}
                 onEdit={() => { setEditClient(client); setShowModal(true); }}
                 onDelete={() => {
-                  if (confirm(`Удалить клиента ${client.firstName} ${client.lastName}?`)) {
+                  if (confirm(`Удалить клиента ${client.lastName} ${client.firstName}?`)) {
                     deleteMutation.mutate(client.id);
                   }
                 }}
@@ -323,11 +325,11 @@ function ClientCard({
       >
         <div className="flex items-center gap-4">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-sm font-bold text-primary-700">
-            {client.firstName[0]}{client.lastName[0]}
+            {client.lastName[0]}{client.firstName[0]}
           </div>
           <div>
             <div className="text-sm font-semibold text-gray-900">
-              {client.firstName} {client.lastName}
+              {client.lastName} {client.firstName}{client.middleName ? ` ${client.middleName}` : ''}
             </div>
             <div className="text-xs text-gray-500">{client.phone || 'Нет телефона'}</div>
           </div>
@@ -489,8 +491,10 @@ function ClientModal({
   onSuccess: () => void;
 }) {
   const isEdit = !!client;
-  const [firstName, setFirstName] = useState(client?.firstName || '');
   const [lastName, setLastName] = useState(client?.lastName || '');
+  const [firstName, setFirstName] = useState(client?.firstName || '');
+  const [middleName, setMiddleName] = useState(client?.middleName || '');
+  const [dateOfBirth, setDateOfBirth] = useState(client?.dateOfBirth ? client.dateOfBirth.slice(0, 10) : '');
   const [phone, setPhone] = useState(client?.phone || '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -516,18 +520,23 @@ function ClientModal({
           body: JSON.stringify({
             firstName,
             lastName,
+            middleName: middleName || undefined,
+            dateOfBirth: dateOfBirth || undefined,
             phone: phone || undefined,
           }),
         });
       } else {
         const finalEmail = `${phone.replace(/\D/g, '')}@client.local`;
+        const password = Math.random().toString(36).slice(2, 14);
         const created: any = await apiFetch('/users', {
           method: 'POST',
           body: JSON.stringify({
             firstName,
             lastName,
+            middleName: middleName || undefined,
+            dateOfBirth: dateOfBirth || undefined,
             email: finalEmail,
-            password: crypto.randomUUID().slice(0, 12),
+            password,
             phone: phone || undefined,
             role: 'CLIENT',
           }),
@@ -568,7 +577,17 @@ function ClientModal({
         </h2>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Фамилия *</label>
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className={inputCls}
+                required
+              />
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Имя *</label>
               <input
@@ -580,27 +599,37 @@ function ClientModal({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Фамилия *</label>
+              <label className="block text-sm font-medium text-gray-700">Отчество</label>
               <input
                 type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
+                value={middleName}
+                onChange={(e) => setMiddleName(e.target.value)}
                 className={inputCls}
-                required
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Телефон *</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+79001234567"
-              className={inputCls}
-              required
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Дата рождения</label>
+              <input
+                type="date"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
+                className={`${inputCls} ${!dateOfBirth ? 'text-gray-400' : ''}`}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Телефон *</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+79001234567"
+                className={inputCls}
+                required
+              />
+            </div>
           </div>
 
           {/* Vehicle — only for new client */}
@@ -795,7 +824,7 @@ function AppointmentDetailModal({
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs font-medium text-gray-500">Клиент</p>
                 <p className="text-sm font-semibold text-gray-900">
-                  {appointment.client.firstName} {appointment.client.lastName}
+                  {appointment.client.lastName} {appointment.client.firstName}
                 </p>
                 {appointment.client.phone && <p className="text-xs text-gray-600">{appointment.client.phone}</p>}
               </div>
@@ -1065,7 +1094,7 @@ function WorkOrderDetailModal({
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs font-medium text-gray-500">Клиент</p>
                 <p className="text-sm font-semibold text-gray-900">
-                  {wo.client.firstName} {wo.client.lastName}
+                  {wo.client.lastName} {wo.client.firstName}
                 </p>
                 {wo.client.phone && <p className="text-xs text-gray-600">{wo.client.phone}</p>}
               </div>

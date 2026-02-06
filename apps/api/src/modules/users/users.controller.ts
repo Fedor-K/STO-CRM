@@ -25,6 +25,14 @@ class CreateUserDto {
 
   @IsOptional()
   @IsString()
+  middleName?: string;
+
+  @IsOptional()
+  @IsString()
+  dateOfBirth?: string;
+
+  @IsOptional()
+  @IsString()
   phone?: string;
 }
 
@@ -44,6 +52,14 @@ class UpdateUserDto {
   @IsOptional()
   @IsString()
   lastName?: string;
+
+  @IsOptional()
+  @IsString()
+  middleName?: string;
+
+  @IsOptional()
+  @IsString()
+  dateOfBirth?: string;
 
   @IsOptional()
   @IsString()

@@ -131,6 +131,8 @@ model User {
   role         UserRole
   firstName    String
   lastName     String
+  middleName   String?
+  dateOfBirth  DateTime?
   phone        String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())

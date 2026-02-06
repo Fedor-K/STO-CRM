@@ -516,8 +516,10 @@ function CreateAppointmentModal({
   const [isNewClient, setIsNewClient] = useState(false);
   const [clientId, setClientId] = useState('');
   // New client fields
-  const [newFirstName, setNewFirstName] = useState('');
   const [newLastName, setNewLastName] = useState('');
+  const [newFirstName, setNewFirstName] = useState('');
+  const [newMiddleName, setNewMiddleName] = useState('');
+  const [newDateOfBirth, setNewDateOfBirth] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
 
@@ -570,20 +572,23 @@ function CreateAppointmentModal({
 
       // 1. Create new client if needed
       if (isNewClient) {
-        if (!newFirstName || !newLastName || !newPhone) {
-          setError('Заполните ФИО и телефон нового клиента');
+        if (!newLastName || !newFirstName || !newPhone) {
+          setError('Заполните фамилию, имя и телефон нового клиента');
           setSaving(false);
           return;
         }
         const email = newEmail || `${newPhone.replace(/\D/g, '')}@client.local`;
+        const password = Math.random().toString(36).slice(2, 14);
         const created: any = await apiFetch('/users', {
           method: 'POST',
           body: JSON.stringify({
             firstName: newFirstName,
             lastName: newLastName,
+            middleName: newMiddleName || undefined,
+            dateOfBirth: newDateOfBirth || undefined,
             phone: newPhone,
             email,
-            password: crypto.randomUUID().slice(0, 12),
+            password,
             role: 'CLIENT',
           }),
         });
@@ -673,7 +678,14 @@ function CreateAppointmentModal({
 
             {isNewClient ? (
               <div className="mt-2 space-y-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <input
+                    placeholder="Фамилия *"
+                    value={newLastName}
+                    onChange={(e) => setNewLastName(e.target.value)}
+                    className={inputCls}
+                    required
+                  />
                   <input
                     placeholder="Имя *"
                     value={newFirstName}
@@ -682,11 +694,19 @@ function CreateAppointmentModal({
                     required
                   />
                   <input
-                    placeholder="Фамилия *"
-                    value={newLastName}
-                    onChange={(e) => setNewLastName(e.target.value)}
+                    placeholder="Отчество"
+                    value={newMiddleName}
+                    onChange={(e) => setNewMiddleName(e.target.value)}
                     className={inputCls}
-                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500">Дата рождения</label>
+                  <input
+                    type="date"
+                    value={newDateOfBirth}
+                    onChange={(e) => setNewDateOfBirth(e.target.value)}
+                    className={`${inputCls} ${!newDateOfBirth ? 'text-gray-400' : ''}`}
                   />
                 </div>
                 <input
@@ -712,7 +732,7 @@ function CreateAppointmentModal({
               >
                 <option value="">Выберите клиента</option>
                 {clients?.data?.map((c) => (
-                  <option key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.email})</option>
+                  <option key={c.id} value={c.id}>{c.lastName} {c.firstName} ({c.email})</option>
                 ))}
               </select>
             )}
