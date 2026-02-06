@@ -1522,6 +1522,7 @@ interface WorkOrderDetail {
     normHours: number | null;
     recommended: boolean;
     approvedByClient: boolean | null;
+    contributionPercent: number;
     mechanic: { id: string; firstName: string; lastName: string } | null;
   }[];
   workLogs: {
@@ -1767,7 +1768,7 @@ function WorkOrderDetailModal({
     }
   }
 
-  async function handleUpdateItem(itemId: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) {
+  async function handleUpdateItem(itemId: string, data: { unitPrice?: number; quantity?: number; normHours?: number; contributionPercent?: number }) {
     try {
       await apiFetch(`/work-orders/${workOrderId}/items/${itemId}`, {
         method: 'PATCH',
@@ -2008,7 +2009,7 @@ function WorkOrderDetailModal({
 
 // --- Editable table rows ---
 
-type ItemRow = { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; mechanic?: { id: string; firstName: string; lastName: string } | null };
+type ItemRow = { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; contributionPercent?: number; mechanic?: { id: string; firstName: string; lastName: string } | null };
 
 function EditableLaborRow({
   item,
@@ -2023,13 +2024,14 @@ function EditableLaborRow({
   isEditable: boolean;
   mechanics: { id: string; firstName: string; lastName: string }[];
   defaultMechanicId: string;
-  onUpdate: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
+  onUpdate: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number; contributionPercent?: number }) => void;
   onDelete: (id: string) => void;
   onChangeMechanic: (itemId: string, mechanicId: string | null) => void;
 }) {
   const [price, setPrice] = useState(Number(item.unitPrice));
   const [norm, setNorm] = useState(item.normHours ?? Number(item.quantity));
   const [total, setTotal] = useState(Number(item.totalPrice));
+  const [pct, setPct] = useState(item.contributionPercent ?? 100);
 
   const editCls = 'w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-gray-300 focus:border-primary-400 focus:bg-white focus:outline-none';
 
@@ -2063,19 +2065,33 @@ function EditableLaborRow({
     onUpdate(item.id, { unitPrice: price, quantity: norm, normHours: norm });
   }
 
+  function savePct() {
+    const origPct = item.contributionPercent ?? 100;
+    if (pct === origPct) return;
+    const clamped = Math.max(1, Math.min(100, Math.round(pct)));
+    setPct(clamped);
+    onUpdate(item.id, { contributionPercent: clamped });
+  }
+
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
   }
 
   const effectiveMechanicId = item.mechanic?.id || defaultMechanicId;
   const effectiveMechanic = item.mechanic || mechanics.find((m) => m.id === defaultMechanicId) || null;
+  const displayPct = item.contributionPercent ?? 100;
 
   if (!isEditable) {
     return (
       <tr className="border-b border-gray-50">
         <td className="py-1.5">
           <div className="text-gray-700">{item.description}</div>
-          {effectiveMechanic && <div className="text-[10px] text-gray-400">{effectiveMechanic.firstName} {effectiveMechanic.lastName}</div>}
+          {effectiveMechanic && (
+            <div className="text-[10px] text-gray-400">
+              {effectiveMechanic.firstName} {effectiveMechanic.lastName}
+              {displayPct !== 100 && <span className="ml-1 text-primary-500">{displayPct}%</span>}
+            </div>
+          )}
         </td>
         <td className="py-1.5 text-right text-gray-600">{formatMoney(item.unitPrice)}</td>
         <td className="py-1.5 text-right text-gray-600">{item.normHours ?? Number(item.quantity)}</td>
@@ -2089,16 +2105,31 @@ function EditableLaborRow({
     <tr className="border-b border-gray-50">
       <td className="py-1.5">
         <div className="text-gray-700">{item.description}</div>
-        <select
-          value={effectiveMechanicId || ''}
-          onChange={(e) => onChangeMechanic(item.id, e.target.value || null)}
-          className="mt-0.5 w-full rounded border border-gray-200 bg-gray-50 px-1 py-0.5 text-[10px] text-gray-500 focus:border-primary-400 focus:outline-none"
-        >
-          <option value="">Мастер...</option>
-          {mechanics.map((m) => (
-            <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
-          ))}
-        </select>
+        <div className="mt-0.5 flex items-center gap-1">
+          <select
+            value={effectiveMechanicId || ''}
+            onChange={(e) => onChangeMechanic(item.id, e.target.value || null)}
+            className="flex-1 rounded border border-gray-200 bg-gray-50 px-1 py-0.5 text-[10px] text-gray-500 focus:border-primary-400 focus:outline-none"
+          >
+            <option value="">Мастер...</option>
+            {mechanics.map((m) => (
+              <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+            ))}
+          </select>
+          <div className="flex items-center">
+            <input
+              type="number"
+              value={pct}
+              onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setPct(v); }}
+              onBlur={savePct}
+              onKeyDown={handleKeyDown}
+              min={1}
+              max={100}
+              className="w-10 rounded border border-gray-200 bg-gray-50 px-0.5 py-0.5 text-center text-[10px] text-gray-500 focus:border-primary-400 focus:outline-none"
+            />
+            <span className="text-[10px] text-gray-400">%</span>
+          </div>
+        </div>
       </td>
       <td className="py-1.5 text-right">
         <input type="number" value={price} onChange={(e) => changePrice(e.target.value)} onBlur={save} onKeyDown={handleKeyDown} min={0} step={100} className={editCls} />
@@ -2386,7 +2417,7 @@ function ItemsSection({
   defaultMechanicId,
   onChangeMechanic,
 }: {
-  items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; recommended: boolean; approvedByClient: boolean | null; mechanic?: { id: string; firstName: string; lastName: string } | null }[];
+  items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; recommended: boolean; approvedByClient: boolean | null; contributionPercent?: number; mechanic?: { id: string; firstName: string; lastName: string } | null }[];
   totalLabor: string | number;
   totalParts: string | number;
   totalAmount: string | number;
@@ -2407,7 +2438,7 @@ function ItemsSection({
   onAddLabor: () => void;
   onAddPart: () => void;
   onDeleteItem: (id: string) => void;
-  onUpdateItem: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
+  onUpdateItem: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number; contributionPercent?: number }) => void;
   mechanics: { id: string; firstName: string; lastName: string }[];
   defaultMechanicId: string;
   onChangeMechanic: (itemId: string, mechanicId: string | null) => void;

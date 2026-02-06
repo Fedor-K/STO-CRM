@@ -337,8 +337,9 @@ model WorkOrderItem {
   totalPrice  Decimal           @db.Decimal(12, 2)
   normHours        Decimal?  @db.Decimal(6, 2)
   recommended      Boolean   @default(false)
-  approvedByClient Boolean?
-  createdAt        DateTime  @default(now())
+  approvedByClient    Boolean?
+  contributionPercent Int       @default(100)
+  createdAt           DateTime  @default(now())
 
   workOrderId String
   workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)

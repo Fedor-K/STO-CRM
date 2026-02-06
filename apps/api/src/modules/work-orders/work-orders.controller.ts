@@ -109,6 +109,9 @@ class CreateItemDto {
 
   @IsOptional() @IsUUID()
   mechanicId?: string;
+
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(1)
+  contributionPercent?: number;
 }
 
 class UpdateItemDto {
@@ -129,6 +132,9 @@ class UpdateItemDto {
 
   @IsOptional() @IsString()
   mechanicId?: string | null;
+
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(1)
+  contributionPercent?: number;
 }
 
 class CreateWorkLogDto {

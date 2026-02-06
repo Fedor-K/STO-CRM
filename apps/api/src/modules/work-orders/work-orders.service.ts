@@ -397,6 +397,7 @@ export class WorkOrdersService {
       partId?: string;
       recommended?: boolean;
       mechanicId?: string;
+      contributionPercent?: number;
     },
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
@@ -416,6 +417,7 @@ export class WorkOrdersService {
         partId: data.partId,
         recommended: data.recommended ?? false,
         mechanicId: data.mechanicId,
+        contributionPercent: data.contributionPercent ?? 100,
       },
       include: {
         mechanic: { select: { id: true, firstName: true, lastName: true } },
@@ -437,6 +439,7 @@ export class WorkOrdersService {
       normHours?: number;
       approvedByClient?: boolean;
       mechanicId?: string | null;
+      contributionPercent?: number;
     },
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
