@@ -70,6 +70,43 @@ function formatDate(iso: string): string {
   });
 }
 
+const WO_STATUS_LABELS: Record<string, string> = {
+  NEW: 'Новый',
+  DIAGNOSED: 'Диагностика',
+  APPROVED: 'Согласован',
+  IN_PROGRESS: 'В работе',
+  PAUSED: 'Пауза',
+  COMPLETED: 'Выполнен',
+  INVOICED: 'Счёт',
+  PAID: 'Оплачен',
+  CLOSED: 'Закрыт',
+  CANCELLED: 'Отменён',
+};
+
+const WO_STATUS_COLORS: Record<string, string> = {
+  NEW: 'bg-gray-200 text-gray-700',
+  DIAGNOSED: 'bg-blue-100 text-blue-700',
+  APPROVED: 'bg-indigo-100 text-indigo-700',
+  IN_PROGRESS: 'bg-yellow-100 text-yellow-700',
+  PAUSED: 'bg-orange-100 text-orange-700',
+  COMPLETED: 'bg-green-100 text-green-700',
+  INVOICED: 'bg-purple-100 text-purple-700',
+  PAID: 'bg-emerald-100 text-emerald-700',
+  CLOSED: 'bg-teal-100 text-teal-700',
+  CANCELLED: 'bg-red-100 text-red-700',
+};
+
+function formatMoney(amount: number | string): string {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (!num) return '0 ₽';
+  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
+}
+
+function formatShortDate(dateStr: string): string {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
 // --- Main Page ---
 
 export default function AppointmentDetailPage() {
@@ -77,6 +114,8 @@ export default function AppointmentDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const id = params.id as string;
+
+  const [infoModal, setInfoModal] = useState<'client' | 'vehicle' | null>(null);
 
   const { data: apt, isLoading } = useQuery<AppointmentDetail>({
     queryKey: ['appointment', id],
@@ -158,24 +197,34 @@ export default function AppointmentDetailPage() {
       {/* Info Grid */}
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Client & Vehicle */}
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <h3 className="text-sm font-semibold uppercase text-gray-500">Клиент</h3>
-          <div className="mt-2 text-sm">
-            <div className="font-medium text-gray-900">{apt.client.firstName} {apt.client.lastName}</div>
-            {apt.client.phone && <div className="text-gray-500">{apt.client.phone}</div>}
-            {apt.client.email && <div className="text-gray-500">{apt.client.email}</div>}
-          </div>
-          <h3 className="mt-4 text-sm font-semibold uppercase text-gray-500">Автомобиль</h3>
-          <div className="mt-2 text-sm">
-            <div className="font-medium text-gray-900">
-              {apt.vehicle.make} {apt.vehicle.model} {apt.vehicle.year ? `(${apt.vehicle.year})` : ''}
+        <div className="space-y-3">
+          <div
+            className="cursor-pointer rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-primary-300 hover:bg-primary-50/30"
+            onClick={() => setInfoModal('client')}
+          >
+            <h3 className="text-sm font-semibold uppercase text-gray-500">Клиент</h3>
+            <div className="mt-2 text-sm">
+              <div className="font-medium text-gray-900">{apt.client.firstName} {apt.client.lastName}</div>
+              {apt.client.phone && <div className="text-gray-500">{apt.client.phone}</div>}
+              {apt.client.email && <div className="text-gray-500">{apt.client.email}</div>}
             </div>
-            {apt.vehicle.licensePlate && (
-              <div className="font-mono text-gray-500">{apt.vehicle.licensePlate}</div>
-            )}
-            {apt.vehicle.mileage != null && (
-              <div className="text-xs text-gray-500">Пробег: {apt.vehicle.mileage.toLocaleString('ru-RU')} км</div>
-            )}
+          </div>
+          <div
+            className="cursor-pointer rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-primary-300 hover:bg-primary-50/30"
+            onClick={() => setInfoModal('vehicle')}
+          >
+            <h3 className="text-sm font-semibold uppercase text-gray-500">Автомобиль</h3>
+            <div className="mt-2 text-sm">
+              <div className="font-medium text-gray-900">
+                {apt.vehicle.make} {apt.vehicle.model} {apt.vehicle.year ? `(${apt.vehicle.year})` : ''}
+              </div>
+              {apt.vehicle.licensePlate && (
+                <div className="font-mono text-gray-500">{apt.vehicle.licensePlate}</div>
+              )}
+              {apt.vehicle.mileage != null && (
+                <div className="text-xs text-gray-500">Пробег: {apt.vehicle.mileage.toLocaleString('ru-RU')} км</div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -258,6 +307,200 @@ export default function AppointmentDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Info Modals */}
+      {infoModal === 'client' && (
+        <ClientInfoModal clientId={apt.clientId} client={apt.client} onClose={() => setInfoModal(null)} />
+      )}
+      {infoModal === 'vehicle' && (
+        <VehicleInfoModal vehicleId={apt.vehicleId} vehicle={apt.vehicle} onClose={() => setInfoModal(null)} />
+      )}
+    </div>
+  );
+}
+
+// --- Client Info Modal ---
+
+function ClientInfoModal({
+  clientId,
+  client,
+  onClose,
+}: {
+  clientId: string;
+  client: AppointmentDetail['client'];
+  onClose: () => void;
+}) {
+  const { data: fullClient } = useQuery<{
+    id: string; firstName: string; lastName: string; middleName: string | null;
+    phone: string | null; email: string | null; dateOfBirth: string | null; createdAt: string;
+  }>({
+    queryKey: ['client-info', clientId],
+    queryFn: () => apiFetch(`/users/${clientId}`),
+  });
+
+  const { data: workOrders } = useQuery<{
+    data: { id: string; orderNumber: string; status: string; totalAmount: string | number; createdAt: string;
+      vehicle: { make: string; model: string; licensePlate: string | null } }[];
+    meta: { total: number };
+  }>({
+    queryKey: ['client-work-orders', clientId],
+    queryFn: () => apiFetch(`/work-orders?clientId=${clientId}&limit=50&sort=createdAt&order=desc`),
+  });
+
+  const c = fullClient || client;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">Клиент</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-gray-200 p-4">
+          <div className="text-lg font-medium text-gray-900">
+            {c.firstName} {c.lastName} {(fullClient as any)?.middleName || ''}
+          </div>
+          {c.phone && <div className="mt-1 text-sm text-gray-600">{c.phone}</div>}
+          {c.email && <div className="text-sm text-gray-600">{c.email}</div>}
+          {fullClient?.dateOfBirth && (
+            <div className="mt-1 text-sm text-gray-500">
+              Дата рождения: {new Date(fullClient.dateOfBirth).toLocaleDateString('ru-RU')}
+            </div>
+          )}
+          {fullClient?.createdAt && (
+            <div className="text-sm text-gray-500">
+              Клиент с: {new Date(fullClient.createdAt).toLocaleDateString('ru-RU')}
+            </div>
+          )}
+        </div>
+
+        <h3 className="mt-5 text-sm font-semibold uppercase text-gray-500">
+          История заказов {workOrders?.meta?.total != null && `(${workOrders.meta.total})`}
+        </h3>
+
+        {!workOrders ? (
+          <div className="mt-3 text-center text-sm text-gray-500">Загрузка...</div>
+        ) : workOrders.data.length === 0 ? (
+          <div className="mt-3 text-center text-sm text-gray-500">Заказов нет</div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {workOrders.data.map((wo) => (
+              <Link
+                key={wo.id}
+                href={`/work-orders/${wo.id}`}
+                className="block rounded-lg border border-gray-200 p-3 transition-colors hover:border-primary-300 hover:bg-primary-50/30"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-primary-600">{wo.orderNumber}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${WO_STATUS_COLORS[wo.status] || 'bg-gray-100 text-gray-600'}`}>
+                    {WO_STATUS_LABELS[wo.status] || wo.status}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-sm">
+                  <span className="text-gray-500">
+                    {wo.vehicle.make} {wo.vehicle.model}
+                    {wo.vehicle.licensePlate ? ` \u00B7 ${wo.vehicle.licensePlate}` : ''}
+                  </span>
+                  <span className="font-medium text-gray-900">{formatMoney(wo.totalAmount)}</span>
+                </div>
+                <div className="mt-0.5 text-xs text-gray-400">{formatShortDate(wo.createdAt)}</div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Vehicle Info Modal ---
+
+function VehicleInfoModal({
+  vehicleId,
+  vehicle,
+  onClose,
+}: {
+  vehicleId: string;
+  vehicle: AppointmentDetail['vehicle'];
+  onClose: () => void;
+}) {
+  const { data: fullVehicle } = useQuery<{
+    id: string; make: string; model: string; year: number | null; vin: string | null;
+    licensePlate: string | null; color: string | null; mileage: number | null; createdAt: string;
+    client: { id: string; firstName: string; lastName: string; phone: string | null; email: string };
+    workOrders: { id: string; orderNumber: string; status: string; totalAmount: string | number; createdAt: string }[];
+  }>({
+    queryKey: ['vehicle-info', vehicleId],
+    queryFn: () => apiFetch(`/vehicles/${vehicleId}`),
+  });
+
+  const v = fullVehicle || vehicle;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">Автомобиль</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-gray-200 p-4">
+          <div className="text-lg font-medium text-gray-900">
+            {v.make} {v.model} {v.year ? `(${v.year})` : ''}
+          </div>
+          {v.licensePlate && <div className="mt-1 font-mono text-sm text-gray-600">{v.licensePlate}</div>}
+          {(fullVehicle as any)?.vin && <div className="text-xs text-gray-500">VIN: {(fullVehicle as any).vin}</div>}
+          {(fullVehicle as any)?.color && <div className="text-sm text-gray-500">Цвет: {(fullVehicle as any).color}</div>}
+          {v.mileage != null && (
+            <div className="text-sm text-gray-500">Пробег: {v.mileage.toLocaleString('ru-RU')} км</div>
+          )}
+          {fullVehicle?.client && (
+            <div className="mt-2 text-sm text-gray-500">
+              Владелец: {fullVehicle.client.firstName} {fullVehicle.client.lastName}
+            </div>
+          )}
+        </div>
+
+        <h3 className="mt-5 text-sm font-semibold uppercase text-gray-500">
+          История заказов {fullVehicle?.workOrders && `(${fullVehicle.workOrders.length})`}
+        </h3>
+
+        {!fullVehicle ? (
+          <div className="mt-3 text-center text-sm text-gray-500">Загрузка...</div>
+        ) : fullVehicle.workOrders.length === 0 ? (
+          <div className="mt-3 text-center text-sm text-gray-500">Заказов нет</div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {fullVehicle.workOrders.map((wo) => (
+              <Link
+                key={wo.id}
+                href={`/work-orders/${wo.id}`}
+                className="block rounded-lg border border-gray-200 p-3 transition-colors hover:border-primary-300 hover:bg-primary-50/30"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-primary-600">{wo.orderNumber}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${WO_STATUS_COLORS[wo.status] || 'bg-gray-100 text-gray-600'}`}>
+                    {WO_STATUS_LABELS[wo.status] || wo.status}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-sm">
+                  <span className="font-medium text-gray-900">{formatMoney(wo.totalAmount)}</span>
+                </div>
+                <div className="mt-0.5 text-xs text-gray-400">{formatShortDate(wo.createdAt)}</div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
