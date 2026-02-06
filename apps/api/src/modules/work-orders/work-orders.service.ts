@@ -369,6 +369,25 @@ export class WorkOrdersService {
         from: old.mechanicId,
         to: data.mechanicId,
       });
+
+      // Auto-assign new mechanic to labor items that have no mechanic
+      if (data.mechanicId) {
+        const laborItems = await this.prisma.workOrderItem.findMany({
+          where: { workOrderId: id, type: 'LABOR' },
+          include: { mechanics: true },
+        });
+        for (const item of laborItems) {
+          if (item.mechanics.length === 0) {
+            await this.prisma.workOrderItemMechanic.create({
+              data: {
+                workOrderItemId: item.id,
+                mechanicId: data.mechanicId,
+                contributionPercent: 100,
+              },
+            });
+          }
+        }
+      }
     }
     if (data.advisorId !== undefined && data.advisorId !== old.advisorId) {
       const name = result.advisor
