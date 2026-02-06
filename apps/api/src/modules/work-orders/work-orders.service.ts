@@ -37,7 +37,11 @@ const workOrderInclude = {
   items: {
     orderBy: { createdAt: 'asc' as const },
     include: {
-      mechanic: { select: { id: true, firstName: true, lastName: true } },
+      mechanics: {
+        include: {
+          mechanic: { select: { id: true, firstName: true, lastName: true } },
+        },
+      },
     },
   },
   workLogs: {
@@ -397,7 +401,6 @@ export class WorkOrdersService {
       partId?: string;
       recommended?: boolean;
       mechanicId?: string;
-      contributionPercent?: number;
     },
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
@@ -416,16 +419,40 @@ export class WorkOrdersService {
         serviceId: data.serviceId,
         partId: data.partId,
         recommended: data.recommended ?? false,
-        mechanicId: data.mechanicId,
-        contributionPercent: data.contributionPercent ?? 100,
       },
       include: {
-        mechanic: { select: { id: true, firstName: true, lastName: true } },
+        mechanics: {
+          include: {
+            mechanic: { select: { id: true, firstName: true, lastName: true } },
+          },
+        },
       },
     });
 
+    // If mechanicId was passed, create pivot record
+    if (data.mechanicId) {
+      await this.prisma.workOrderItemMechanic.create({
+        data: {
+          workOrderItemId: item.id,
+          mechanicId: data.mechanicId,
+          contributionPercent: 100,
+        },
+      });
+    }
+
     await this.recalcTotals(workOrderId);
-    return item;
+
+    // Re-fetch with includes to return full data
+    return this.prisma.workOrderItem.findUnique({
+      where: { id: item.id },
+      include: {
+        mechanics: {
+          include: {
+            mechanic: { select: { id: true, firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
   }
 
   async updateItem(
@@ -438,8 +465,6 @@ export class WorkOrdersService {
       unitPrice?: number;
       normHours?: number;
       approvedByClient?: boolean;
-      mechanicId?: string | null;
-      contributionPercent?: number;
     },
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
@@ -458,6 +483,13 @@ export class WorkOrdersService {
       data: {
         ...data,
         totalPrice,
+      },
+      include: {
+        mechanics: {
+          include: {
+            mechanic: { select: { id: true, firstName: true, lastName: true } },
+          },
+        },
       },
     });
 
@@ -479,6 +511,74 @@ export class WorkOrdersService {
 
     await this.prisma.workOrderItem.delete({ where: { id: itemId } });
     await this.recalcTotals(workOrderId);
+  }
+
+  // --- Item Mechanics ---
+
+  async addItemMechanic(
+    tenantId: string,
+    workOrderId: string,
+    itemId: string,
+    data: { mechanicId: string; contributionPercent?: number },
+  ): Promise<any> {
+    await this.findById(tenantId, workOrderId);
+
+    const item = await this.prisma.workOrderItem.findFirst({
+      where: { id: itemId, workOrderId },
+    });
+    if (!item) throw new NotFoundException('Позиция не найдена');
+
+    return this.prisma.workOrderItemMechanic.create({
+      data: {
+        workOrderItemId: itemId,
+        mechanicId: data.mechanicId,
+        contributionPercent: data.contributionPercent ?? 100,
+      },
+      include: {
+        mechanic: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+  }
+
+  async updateItemMechanic(
+    tenantId: string,
+    workOrderId: string,
+    itemId: string,
+    mechanicEntryId: string,
+    data: { contributionPercent: number },
+  ): Promise<any> {
+    await this.findById(tenantId, workOrderId);
+
+    const entry = await this.prisma.workOrderItemMechanic.findFirst({
+      where: { id: mechanicEntryId, workOrderItemId: itemId },
+    });
+    if (!entry) throw new NotFoundException('Запись механика не найдена');
+
+    return this.prisma.workOrderItemMechanic.update({
+      where: { id: mechanicEntryId },
+      data: { contributionPercent: data.contributionPercent },
+      include: {
+        mechanic: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+  }
+
+  async removeItemMechanic(
+    tenantId: string,
+    workOrderId: string,
+    itemId: string,
+    mechanicEntryId: string,
+  ): Promise<void> {
+    await this.findById(tenantId, workOrderId);
+
+    const entry = await this.prisma.workOrderItemMechanic.findFirst({
+      where: { id: mechanicEntryId, workOrderItemId: itemId },
+    });
+    if (!entry) throw new NotFoundException('Запись механика не найдена');
+
+    await this.prisma.workOrderItemMechanic.delete({
+      where: { id: mechanicEntryId },
+    });
   }
 
   // --- Work Logs ---

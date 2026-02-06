@@ -149,7 +149,7 @@ model User {
   workOrdersAsAdvisor    WorkOrder[]            @relation("WorkOrderAdvisor")
   workOrdersAsMechanic   WorkOrder[]            @relation("WorkOrderMechanic")
   workLogs               WorkLog[]
-  workOrderItems         WorkOrderItem[]        @relation("ItemMechanic")
+  workOrderItemMechanics WorkOrderItemMechanic[] @relation("ItemMechanics")
   followUps              FollowUp[]
 
   @@unique([email, tenantId])
@@ -338,7 +338,6 @@ model WorkOrderItem {
   normHours        Decimal?  @db.Decimal(6, 2)
   recommended      Boolean   @default(false)
   approvedByClient    Boolean?
-  contributionPercent Int       @default(100)
   createdAt           DateTime  @default(now())
 
   workOrderId String
@@ -350,11 +349,24 @@ model WorkOrderItem {
   partId String?
   part   Part?   @relation(fields: [partId], references: [id])
 
-  mechanicId String?
-  mechanic   User?   @relation("ItemMechanic", fields: [mechanicId], references: [id])
+  mechanics WorkOrderItemMechanic[]
 
   @@index([workOrderId])
   @@map("work_order_items")
+}
+
+model WorkOrderItemMechanic {
+  id                  String        @id @default(uuid())
+  contributionPercent Int           @default(100)
+  workOrderItemId     String
+  workOrderItem       WorkOrderItem @relation(fields: [workOrderItemId], references: [id], onDelete: Cascade)
+  mechanicId          String
+  mechanic            User          @relation("ItemMechanics", fields: [mechanicId], references: [id])
+
+  @@unique([workOrderItemId, mechanicId])
+  @@index([workOrderItemId])
+  @@index([mechanicId])
+  @@map("work_order_item_mechanics")
 }
 
 model WorkLog {

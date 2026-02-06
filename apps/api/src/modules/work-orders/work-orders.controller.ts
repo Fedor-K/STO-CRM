@@ -109,9 +109,6 @@ class CreateItemDto {
 
   @IsOptional() @IsUUID()
   mechanicId?: string;
-
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(1)
-  contributionPercent?: number;
 }
 
 class UpdateItemDto {
@@ -129,12 +126,19 @@ class UpdateItemDto {
 
   @IsOptional() @IsBoolean()
   approvedByClient?: boolean;
+}
 
-  @IsOptional() @IsString()
-  mechanicId?: string | null;
+class AddItemMechanicDto {
+  @IsUUID()
+  mechanicId!: string;
 
   @IsOptional() @Type(() => Number) @IsNumber() @Min(1)
   contributionPercent?: number;
+}
+
+class UpdateItemMechanicDto {
+  @Type(() => Number) @IsNumber() @Min(1)
+  contributionPercent!: number;
 }
 
 class CreateWorkLogDto {
@@ -290,6 +294,45 @@ export class WorkOrdersController {
     @Param('itemId') itemId: string,
   ) {
     return this.workOrdersService.deleteItem(tenantId, id, itemId);
+  }
+
+  // --- Item Mechanics ---
+
+  @Post(':id/items/:itemId/mechanics')
+  @Roles('work-orders:update')
+  @ApiOperation({ summary: 'Добавить механика к работе' })
+  addItemMechanic(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: AddItemMechanicDto,
+  ) {
+    return this.workOrdersService.addItemMechanic(tenantId, id, itemId, dto);
+  }
+
+  @Patch(':id/items/:itemId/mechanics/:mechanicEntryId')
+  @Roles('work-orders:update')
+  @ApiOperation({ summary: 'Обновить % механика' })
+  updateItemMechanic(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Param('mechanicEntryId') mechanicEntryId: string,
+    @Body() dto: UpdateItemMechanicDto,
+  ) {
+    return this.workOrdersService.updateItemMechanic(tenantId, id, itemId, mechanicEntryId, dto);
+  }
+
+  @Delete(':id/items/:itemId/mechanics/:mechanicEntryId')
+  @Roles('work-orders:update')
+  @ApiOperation({ summary: 'Удалить механика из работы' })
+  removeItemMechanic(
+    @CurrentTenant() tenantId: string,
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Param('mechanicEntryId') mechanicEntryId: string,
+  ) {
+    return this.workOrdersService.removeItemMechanic(tenantId, id, itemId, mechanicEntryId);
   }
 
   // --- Work Logs ---

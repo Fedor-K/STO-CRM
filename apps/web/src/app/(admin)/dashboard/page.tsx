@@ -1522,8 +1522,7 @@ interface WorkOrderDetail {
     normHours: number | null;
     recommended: boolean;
     approvedByClient: boolean | null;
-    contributionPercent: number;
-    mechanic: { id: string; firstName: string; lastName: string } | null;
+    mechanics: { id: string; contributionPercent: number; mechanic: { id: string; firstName: string; lastName: string } }[];
   }[];
   workLogs: {
     id: string;
@@ -1768,7 +1767,7 @@ function WorkOrderDetailModal({
     }
   }
 
-  async function handleUpdateItem(itemId: string, data: { unitPrice?: number; quantity?: number; normHours?: number; contributionPercent?: number }) {
+  async function handleUpdateItem(itemId: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) {
     try {
       await apiFetch(`/work-orders/${workOrderId}/items/${itemId}`, {
         method: 'PATCH',
@@ -1780,15 +1779,38 @@ function WorkOrderDetailModal({
     }
   }
 
-  async function handleChangeItemMechanic(itemId: string, itemMechanicId: string | null) {
+  async function handleAddItemMechanic(itemId: string, newMechanicId: string, contributionPercent?: number) {
     try {
-      await apiFetch(`/work-orders/${workOrderId}/items/${itemId}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ mechanicId: itemMechanicId }),
+      await apiFetch(`/work-orders/${workOrderId}/items/${itemId}/mechanics`, {
+        method: 'POST',
+        body: JSON.stringify({ mechanicId: newMechanicId, contributionPercent: contributionPercent ?? 100 }),
       });
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
     } catch (err: any) {
       setError(err.message || 'Ошибка назначения мастера');
+    }
+  }
+
+  async function handleUpdateItemMechanic(itemId: string, entryId: string, contributionPercent: number) {
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items/${itemId}/mechanics/${entryId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ contributionPercent }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка обновления %');
+    }
+  }
+
+  async function handleRemoveItemMechanic(itemId: string, entryId: string) {
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items/${itemId}/mechanics/${entryId}`, {
+        method: 'DELETE',
+      });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка удаления мастера');
     }
   }
 
@@ -1927,7 +1949,9 @@ function WorkOrderDetailModal({
                     onUpdateItem={handleUpdateItem}
                     mechanics={mechanics?.data || []}
                     defaultMechanicId={mechanicId}
-                    onChangeMechanic={handleChangeItemMechanic}
+                    onAddItemMechanic={handleAddItemMechanic}
+                    onUpdateItemMechanic={handleUpdateItemMechanic}
+                    onRemoveItemMechanic={handleRemoveItemMechanic}
                   />
 
                   {recommendedItems.length > 0 && (
@@ -2009,7 +2033,7 @@ function WorkOrderDetailModal({
 
 // --- Editable table rows ---
 
-type ItemRow = { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; contributionPercent?: number; mechanic?: { id: string; firstName: string; lastName: string } | null };
+type ItemRow = { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; mechanics: { id: string; contributionPercent: number; mechanic: { id: string; firstName: string; lastName: string } }[] };
 
 function EditableLaborRow({
   item,
@@ -2018,20 +2042,24 @@ function EditableLaborRow({
   defaultMechanicId,
   onUpdate,
   onDelete,
-  onChangeMechanic,
+  onAddItemMechanic,
+  onUpdateItemMechanic,
+  onRemoveItemMechanic,
 }: {
   item: ItemRow;
   isEditable: boolean;
   mechanics: { id: string; firstName: string; lastName: string }[];
   defaultMechanicId: string;
-  onUpdate: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number; contributionPercent?: number }) => void;
+  onUpdate: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
   onDelete: (id: string) => void;
-  onChangeMechanic: (itemId: string, mechanicId: string | null) => void;
+  onAddItemMechanic: (itemId: string, mechanicId: string, pct?: number) => void;
+  onUpdateItemMechanic: (itemId: string, entryId: string, pct: number) => void;
+  onRemoveItemMechanic: (itemId: string, entryId: string) => void;
 }) {
   const [price, setPrice] = useState(Number(item.unitPrice));
   const [norm, setNorm] = useState(item.normHours ?? Number(item.quantity));
   const [total, setTotal] = useState(Number(item.totalPrice));
-  const [pct, setPct] = useState(item.contributionPercent ?? 100);
+  const [addMechanicId, setAddMechanicId] = useState('');
 
   const editCls = 'w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-right text-xs hover:border-gray-300 focus:border-primary-400 focus:bg-white focus:outline-none';
 
@@ -2065,31 +2093,30 @@ function EditableLaborRow({
     onUpdate(item.id, { unitPrice: price, quantity: norm, normHours: norm });
   }
 
-  function savePct() {
-    const origPct = item.contributionPercent ?? 100;
-    if (pct === origPct) return;
-    const clamped = Math.max(1, Math.min(100, Math.round(pct)));
-    setPct(clamped);
-    onUpdate(item.id, { contributionPercent: clamped });
-  }
-
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
   }
 
-  const effectiveMechanicId = item.mechanic?.id || defaultMechanicId;
-  const effectiveMechanic = item.mechanic || mechanics.find((m) => m.id === defaultMechanicId) || null;
-  const displayPct = item.contributionPercent ?? 100;
+  // Assigned mechanic IDs for filtering the "add" dropdown
+  const assignedMechanicIds = new Set(item.mechanics.map((m) => m.mechanic.id));
+  const availableMechanics = mechanics.filter((m) => !assignedMechanicIds.has(m.id));
 
   if (!isEditable) {
     return (
       <tr className="border-b border-gray-50">
         <td className="py-1.5">
           <div className="text-gray-700">{item.description}</div>
-          {effectiveMechanic && (
+          {item.mechanics.length > 0 && (
             <div className="text-[10px] text-gray-400">
-              {effectiveMechanic.firstName} {effectiveMechanic.lastName}
-              {displayPct !== 100 && <span className="ml-1 text-primary-500">{displayPct}%</span>}
+              {item.mechanics.map((entry, i) => (
+                <span key={entry.id}>
+                  {i > 0 && ', '}
+                  {entry.mechanic.firstName} {entry.mechanic.lastName}
+                  {(item.mechanics.length > 1 || entry.contributionPercent !== 100) && (
+                    <span className="ml-0.5 text-primary-500">{entry.contributionPercent}%</span>
+                  )}
+                </span>
+              ))}
             </div>
           )}
         </td>
@@ -2105,30 +2132,45 @@ function EditableLaborRow({
     <tr className="border-b border-gray-50">
       <td className="py-1.5">
         <div className="text-gray-700">{item.description}</div>
-        <div className="mt-0.5 flex items-center gap-1">
-          <select
-            value={effectiveMechanicId || ''}
-            onChange={(e) => onChangeMechanic(item.id, e.target.value || null)}
-            className="flex-1 rounded border border-gray-200 bg-gray-50 px-1 py-0.5 text-[10px] text-gray-500 focus:border-primary-400 focus:outline-none"
-          >
-            <option value="">Мастер...</option>
-            {mechanics.map((m) => (
-              <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
-            ))}
-          </select>
-          <div className="flex items-center">
-            <input
-              type="number"
-              value={pct}
-              onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setPct(v); }}
-              onBlur={savePct}
-              onKeyDown={handleKeyDown}
-              min={1}
-              max={100}
-              className="w-10 rounded border border-gray-200 bg-gray-50 px-0.5 py-0.5 text-center text-[10px] text-gray-500 focus:border-primary-400 focus:outline-none"
+        {/* Assigned mechanics list */}
+        <div className="mt-0.5 space-y-0.5">
+          {item.mechanics.map((entry) => (
+            <MechanicEntryRow
+              key={entry.id}
+              entry={entry}
+              itemId={item.id}
+              onUpdate={onUpdateItemMechanic}
+              onRemove={onRemoveItemMechanic}
             />
-            <span className="text-[10px] text-gray-400">%</span>
-          </div>
+          ))}
+          {/* Add new mechanic */}
+          {availableMechanics.length > 0 && (
+            <div className="flex items-center gap-0.5">
+              <select
+                value={addMechanicId}
+                onChange={(e) => setAddMechanicId(e.target.value)}
+                className="flex-1 rounded border border-gray-200 bg-gray-50 px-1 py-0.5 text-[10px] text-gray-500 focus:border-primary-400 focus:outline-none"
+              >
+                <option value="">Мастер...</option>
+                {availableMechanics.map((m) => (
+                  <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  if (addMechanicId) {
+                    onAddItemMechanic(item.id, addMechanicId);
+                    setAddMechanicId('');
+                  }
+                }}
+                disabled={!addMechanicId}
+                className="rounded bg-primary-50 px-1 py-0.5 text-[10px] font-medium text-primary-600 hover:bg-primary-100 disabled:opacity-30"
+              >
+                +
+              </button>
+            </div>
+          )}
         </div>
       </td>
       <td className="py-1.5 text-right">
@@ -2145,6 +2187,57 @@ function EditableLaborRow({
         <button onClick={() => onDelete(item.id)} className="text-red-400 hover:text-red-600">&times;</button>
       </td>
     </tr>
+  );
+}
+
+function MechanicEntryRow({
+  entry,
+  itemId,
+  onUpdate,
+  onRemove,
+}: {
+  entry: { id: string; contributionPercent: number; mechanic: { id: string; firstName: string; lastName: string } };
+  itemId: string;
+  onUpdate: (itemId: string, entryId: string, pct: number) => void;
+  onRemove: (itemId: string, entryId: string) => void;
+}) {
+  const [pct, setPct] = useState(entry.contributionPercent);
+
+  function savePct() {
+    if (pct === entry.contributionPercent) return;
+    const clamped = Math.max(1, Math.min(100, Math.round(pct)));
+    setPct(clamped);
+    onUpdate(itemId, entry.id, clamped);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+  }
+
+  return (
+    <div className="flex items-center gap-0.5">
+      <span className="flex-1 text-[10px] text-gray-500 truncate">
+        {entry.mechanic.firstName} {entry.mechanic.lastName}
+      </span>
+      <input
+        type="number"
+        value={pct}
+        onChange={(e) => { const v = Number(e.target.value); if (!isNaN(v)) setPct(v); }}
+        onBlur={savePct}
+        onKeyDown={handleKeyDown}
+        min={1}
+        max={100}
+        className="w-10 rounded border border-gray-200 bg-gray-50 px-0.5 py-0.5 text-center text-[10px] text-gray-500 focus:border-primary-400 focus:outline-none"
+      />
+      <span className="text-[10px] text-gray-400">%</span>
+      <button
+        type="button"
+        onClick={() => onRemove(itemId, entry.id)}
+        className="text-[10px] text-red-400 hover:text-red-600 ml-0.5"
+      >
+        &times;
+      </button>
+    </div>
   );
 }
 
@@ -2415,9 +2508,11 @@ function ItemsSection({
   onUpdateItem,
   mechanics,
   defaultMechanicId,
-  onChangeMechanic,
+  onAddItemMechanic,
+  onUpdateItemMechanic,
+  onRemoveItemMechanic,
 }: {
-  items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; recommended: boolean; approvedByClient: boolean | null; contributionPercent?: number; mechanic?: { id: string; firstName: string; lastName: string } | null }[];
+  items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; recommended: boolean; approvedByClient: boolean | null; mechanics: { id: string; contributionPercent: number; mechanic: { id: string; firstName: string; lastName: string } }[] }[];
   totalLabor: string | number;
   totalParts: string | number;
   totalAmount: string | number;
@@ -2438,10 +2533,12 @@ function ItemsSection({
   onAddLabor: () => void;
   onAddPart: () => void;
   onDeleteItem: (id: string) => void;
-  onUpdateItem: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number; contributionPercent?: number }) => void;
+  onUpdateItem: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
   mechanics: { id: string; firstName: string; lastName: string }[];
   defaultMechanicId: string;
-  onChangeMechanic: (itemId: string, mechanicId: string | null) => void;
+  onAddItemMechanic: (itemId: string, mechanicId: string, pct?: number) => void;
+  onUpdateItemMechanic: (itemId: string, entryId: string, pct: number) => void;
+  onRemoveItemMechanic: (itemId: string, entryId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<'LABOR' | 'PART'>('LABOR');
@@ -2513,7 +2610,9 @@ function ItemsSection({
                           defaultMechanicId={defaultMechanicId}
                           onUpdate={onUpdateItem}
                           onDelete={onDeleteItem}
-                          onChangeMechanic={onChangeMechanic}
+                          onAddItemMechanic={onAddItemMechanic}
+                          onUpdateItemMechanic={onUpdateItemMechanic}
+                          onRemoveItemMechanic={onRemoveItemMechanic}
                         />
                       ))}
                     </tbody>
