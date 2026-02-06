@@ -152,6 +152,7 @@ model User {
   followUps              FollowUp[]
 
   @@unique([email, tenantId])
+  @@unique([phone, tenantId])
   @@index([tenantId])
   @@map("users")
 }
@@ -191,10 +192,10 @@ model Vehicle {
   appointments Appointment[]
   workOrders   WorkOrder[]
 
+  @@unique([vin, tenantId])
+  @@unique([licensePlate, tenantId])
   @@index([tenantId])
   @@index([clientId])
-  @@index([licensePlate])
-  @@index([vin])
   @@map("vehicles")
 }
 

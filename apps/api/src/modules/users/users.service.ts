@@ -74,6 +74,13 @@ export class UsersService {
     });
     if (existing) throw new ConflictException('Пользователь с таким email уже существует');
 
+    if (data.phone) {
+      const phoneExists = await this.prisma.user.findFirst({
+        where: { phone: data.phone, tenantId },
+      });
+      if (phoneExists) throw new ConflictException('Клиент с таким номером телефона уже существует');
+    }
+
     const passwordHash = await bcrypt.hash(data.password, 10);
 
     const user = await this.prisma.user.create({
@@ -115,6 +122,13 @@ export class UsersService {
         where: { email: data.email, tenantId, NOT: { id } },
       });
       if (existing) throw new ConflictException('Пользователь с таким email уже существует');
+    }
+
+    if (data.phone) {
+      const phoneExists = await this.prisma.user.findFirst({
+        where: { phone: data.phone, tenantId, NOT: { id } },
+      });
+      if (phoneExists) throw new ConflictException('Клиент с таким номером телефона уже существует');
     }
 
     const { dateOfBirth, ...rest } = data;

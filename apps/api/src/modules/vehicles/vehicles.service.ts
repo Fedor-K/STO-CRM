@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { paginate, type PaginatedResponse } from '../../common/dto/pagination.dto';
 import { Vehicle } from '@prisma/client';
@@ -77,6 +77,19 @@ export class VehiclesService {
       clientId: string;
     },
   ): Promise<Vehicle> {
+    if (data.vin) {
+      const existing = await this.prisma.vehicle.findFirst({
+        where: { vin: data.vin, tenantId },
+      });
+      if (existing) throw new ConflictException('Автомобиль с таким VIN уже зарегистрирован');
+    }
+    if (data.licensePlate) {
+      const existing = await this.prisma.vehicle.findFirst({
+        where: { licensePlate: data.licensePlate, tenantId },
+      });
+      if (existing) throw new ConflictException('Автомобиль с таким госномером уже зарегистрирован');
+    }
+
     return this.prisma.vehicle.create({
       data: { ...data, tenantId },
     });
@@ -96,6 +109,20 @@ export class VehiclesService {
     },
   ): Promise<Vehicle> {
     await this.findById(tenantId, id);
+
+    if (data.vin) {
+      const existing = await this.prisma.vehicle.findFirst({
+        where: { vin: data.vin, tenantId, NOT: { id } },
+      });
+      if (existing) throw new ConflictException('Автомобиль с таким VIN уже зарегистрирован');
+    }
+    if (data.licensePlate) {
+      const existing = await this.prisma.vehicle.findFirst({
+        where: { licensePlate: data.licensePlate, tenantId, NOT: { id } },
+      });
+      if (existing) throw new ConflictException('Автомобиль с таким госномером уже зарегистрирован');
+    }
+
     return this.prisma.vehicle.update({ where: { id }, data });
   }
 
