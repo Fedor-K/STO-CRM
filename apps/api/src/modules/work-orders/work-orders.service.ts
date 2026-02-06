@@ -227,7 +227,7 @@ export class WorkOrdersService {
     });
 
     await this.logActivity(workOrder.id, 'CREATED', 'Заказ-наряд создан', userId);
-    return workOrder;
+    return this.findById(tenantId, workOrder.id);
   }
 
   async createFromAppointment(
@@ -333,6 +333,7 @@ export class WorkOrdersService {
 
     if (workOrder) {
       await this.logActivity(workOrder.id, 'CREATED', 'Создан из записи', userId);
+      return this.findById(tenantId, workOrder.id);
     }
 
     return workOrder;
@@ -386,7 +387,7 @@ export class WorkOrdersService {
       await this.logActivity(id, 'UPDATED', 'Обновлён лист осмотра', userId);
     }
 
-    return result;
+    return this.findById(tenantId, id);
   }
 
   async updateStatus(
@@ -430,7 +431,7 @@ export class WorkOrdersService {
       to: newStatus,
     });
 
-    return result;
+    return this.findById(tenantId, id);
   }
 
   async delete(tenantId: string, id: string): Promise<void> {
