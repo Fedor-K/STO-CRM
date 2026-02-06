@@ -20,6 +20,8 @@ interface WorkOrderItem {
   unitPrice: string | number;
   totalPrice: string | number;
   normHours: string | number | null;
+  recommended: boolean;
+  approvedByClient: boolean | null;
 }
 
 interface WorkLogEntry {
@@ -378,7 +380,24 @@ export default function WorkOrderDetailPage() {
                             {item.type === 'LABOR' ? 'Работа' : 'Запчасть'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-900">{item.description}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          <span>{item.description}</span>
+                          {item.recommended && (
+                            <span className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                              item.approvedByClient === true
+                                ? 'bg-green-100 text-green-700'
+                                : item.approvedByClient === false
+                                  ? 'bg-red-100 text-red-700'
+                                  : 'bg-orange-100 text-orange-700'
+                            }`}>
+                              {item.approvedByClient === true
+                                ? 'Одобрено'
+                                : item.approvedByClient === false
+                                  ? 'Отклонено'
+                                  : 'Рекомендация'}
+                            </span>
+                          )}
+                        </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{Number(item.quantity)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{formatMoney(item.unitPrice)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">{formatMoney(item.totalPrice)}</td>
