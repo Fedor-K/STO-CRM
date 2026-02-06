@@ -541,7 +541,7 @@ export class WorkOrdersService {
     },
     userId?: string,
   ): Promise<any> {
-    await this.findById(tenantId, workOrderId);
+    const wo = await this.findById(tenantId, workOrderId);
 
     const existing = await this.prisma.workOrderItem.findFirst({
       where: { id: itemId, workOrderId },
@@ -566,6 +566,22 @@ export class WorkOrdersService {
         },
       },
     });
+
+    // Auto-assign WO mechanic to approved recommended labor item
+    if (data.approvedByClient === true && existing.type === 'LABOR' && wo.mechanicId) {
+      const alreadyAssigned = await this.prisma.workOrderItemMechanic.findFirst({
+        where: { workOrderItemId: itemId },
+      });
+      if (!alreadyAssigned) {
+        await this.prisma.workOrderItemMechanic.create({
+          data: {
+            workOrderItemId: itemId,
+            mechanicId: wo.mechanicId,
+            contributionPercent: 100,
+          },
+        });
+      }
+    }
 
     await this.recalcTotals(workOrderId);
 
