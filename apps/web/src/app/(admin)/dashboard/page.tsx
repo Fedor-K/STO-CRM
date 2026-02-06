@@ -7,6 +7,7 @@ import { useAuth } from '@/providers/auth-provider';
 import Link from 'next/link';
 import {
   INSPECTION_GROUPS,
+  LEVEL_ITEMS,
   createEmptyChecklist,
   type InspectionChecklist,
 } from '@sto-crm/shared';
@@ -2110,6 +2111,13 @@ function InspectionChecklistEditor({
     });
   }
 
+  function setLevel(itemKey: string, level: number) {
+    onChange({
+      ...checklist,
+      [itemKey]: { ...checklist[itemKey], level },
+    });
+  }
+
   return (
     <div>
       <label className="block text-xs font-medium text-gray-600">Лист осмотра</label>
@@ -2144,6 +2152,20 @@ function InspectionChecklistEditor({
                           />
                           <div className="flex-1 min-w-0">
                             <span className="text-xs text-gray-700">{item.label}</span>
+                            {LEVEL_ITEMS.has(item.key) && (
+                              <div className="mt-1 flex items-center gap-2">
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={100}
+                                  step={5}
+                                  value={entry.level ?? 50}
+                                  onChange={(e) => setLevel(item.key, Number(e.target.value))}
+                                  className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-gray-200 accent-primary-600"
+                                />
+                                <span className="w-8 text-right text-[11px] font-medium text-gray-600">{entry.level ?? 50}%</span>
+                              </div>
+                            )}
                             <input
                               type="text"
                               value={entry.note}

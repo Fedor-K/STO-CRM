@@ -7,6 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   INSPECTION_GROUPS,
+  LEVEL_ITEMS,
   createEmptyChecklist,
   type InspectionChecklist,
 } from '@sto-crm/shared';
@@ -877,6 +878,17 @@ function InspectionChecklistReadonly({ checklist }: { checklist: InspectionCheck
                         </span>
                         <div className="flex-1 min-w-0">
                           <span className={`text-sm ${entry?.checked ? 'text-gray-900' : 'text-gray-500'}`}>{item.label}</span>
+                          {LEVEL_ITEMS.has(item.key) && entry?.level != null && (
+                            <div className="mt-0.5 flex items-center gap-2">
+                              <div className="h-1.5 flex-1 rounded-full bg-gray-200">
+                                <div
+                                  className={`h-1.5 rounded-full ${entry.level > 60 ? 'bg-green-500' : entry.level > 25 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                                  style={{ width: `${entry.level}%` }}
+                                />
+                              </div>
+                              <span className="w-8 text-right text-[11px] font-medium text-gray-600">{entry.level}%</span>
+                            </div>
+                          )}
                           {entry?.note && (
                             <p className="text-xs text-gray-500 italic">{entry.note}</p>
                           )}

@@ -12,7 +12,18 @@ export interface InspectionGroup {
 export interface InspectionChecklistEntry {
   checked: boolean;
   note: string;
+  level?: number; // 0-100, для жидкостей (масло, ОЖ и т.д.)
 }
+
+/** Пункты, у которых есть ползунок уровня заполнения */
+export const LEVEL_ITEMS = new Set([
+  'urovenMotornogMasla',
+  'tormoznayaZhidkost',
+  'urovenMaslaKpp',
+  'urovenMaslaGur',
+  'ohlazhdayushhayaZhidkost',
+  'stekloomyvayushhayaZhidkost',
+]);
 
 export type InspectionChecklist = Record<string, InspectionChecklistEntry>;
 
