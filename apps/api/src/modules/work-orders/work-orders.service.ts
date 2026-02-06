@@ -36,6 +36,9 @@ const workOrderInclude = {
   vehicle: { select: { id: true, make: true, model: true, licensePlate: true, year: true, vin: true, mileage: true } },
   items: {
     orderBy: { createdAt: 'asc' as const },
+    include: {
+      mechanic: { select: { id: true, firstName: true, lastName: true } },
+    },
   },
   workLogs: {
     include: {
@@ -393,6 +396,7 @@ export class WorkOrdersService {
       serviceId?: string;
       partId?: string;
       recommended?: boolean;
+      mechanicId?: string;
     },
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
@@ -411,6 +415,10 @@ export class WorkOrdersService {
         serviceId: data.serviceId,
         partId: data.partId,
         recommended: data.recommended ?? false,
+        mechanicId: data.mechanicId,
+      },
+      include: {
+        mechanic: { select: { id: true, firstName: true, lastName: true } },
       },
     });
 
@@ -428,6 +436,7 @@ export class WorkOrdersService {
       unitPrice?: number;
       normHours?: number;
       approvedByClient?: boolean;
+      mechanicId?: string | null;
     },
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);

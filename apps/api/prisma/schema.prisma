@@ -149,6 +149,7 @@ model User {
   workOrdersAsAdvisor    WorkOrder[]            @relation("WorkOrderAdvisor")
   workOrdersAsMechanic   WorkOrder[]            @relation("WorkOrderMechanic")
   workLogs               WorkLog[]
+  workOrderItems         WorkOrderItem[]        @relation("ItemMechanic")
   followUps              FollowUp[]
 
   @@unique([email, tenantId])
@@ -347,6 +348,9 @@ model WorkOrderItem {
 
   partId String?
   part   Part?   @relation(fields: [partId], references: [id])
+
+  mechanicId String?
+  mechanic   User?   @relation("ItemMechanic", fields: [mechanicId], references: [id])
 
   @@index([workOrderId])
   @@map("work_order_items")

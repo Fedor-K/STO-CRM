@@ -1522,6 +1522,7 @@ interface WorkOrderDetail {
     normHours: number | null;
     recommended: boolean;
     approvedByClient: boolean | null;
+    mechanic: { id: string; firstName: string; lastName: string } | null;
   }[];
   workLogs: {
     id: string;
@@ -1778,6 +1779,18 @@ function WorkOrderDetailModal({
     }
   }
 
+  async function handleChangeItemMechanic(itemId: string, itemMechanicId: string | null) {
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items/${itemId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ mechanicId: itemMechanicId }),
+      });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка назначения мастера');
+    }
+  }
+
   const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
 
   return (
@@ -1911,6 +1924,8 @@ function WorkOrderDetailModal({
                     onAddPart={handleAddPart}
                     onDeleteItem={handleDeleteItem}
                     onUpdateItem={handleUpdateItem}
+                    mechanics={mechanics?.data || []}
+                    onChangeMechanic={handleChangeItemMechanic}
                   />
 
                   {recommendedItems.length > 0 && (
@@ -1992,18 +2007,22 @@ function WorkOrderDetailModal({
 
 // --- Editable table rows ---
 
-type ItemRow = { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null };
+type ItemRow = { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; mechanic?: { id: string; firstName: string; lastName: string } | null };
 
 function EditableLaborRow({
   item,
   isEditable,
+  mechanics,
   onUpdate,
   onDelete,
+  onChangeMechanic,
 }: {
   item: ItemRow;
   isEditable: boolean;
+  mechanics: { id: string; firstName: string; lastName: string }[];
   onUpdate: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
   onDelete: (id: string) => void;
+  onChangeMechanic: (itemId: string, mechanicId: string | null) => void;
 }) {
   const [price, setPrice] = useState(Number(item.unitPrice));
   const [norm, setNorm] = useState(item.normHours ?? Number(item.quantity));
@@ -2048,7 +2067,10 @@ function EditableLaborRow({
   if (!isEditable) {
     return (
       <tr className="border-b border-gray-50">
-        <td className="py-1.5 text-gray-700">{item.description}</td>
+        <td className="py-1.5">
+          <div className="text-gray-700">{item.description}</div>
+          {item.mechanic && <div className="text-[10px] text-gray-400">{item.mechanic.firstName} {item.mechanic.lastName}</div>}
+        </td>
         <td className="py-1.5 text-right text-gray-600">{formatMoney(item.unitPrice)}</td>
         <td className="py-1.5 text-right text-gray-600">{item.normHours ?? Number(item.quantity)}</td>
         <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.totalPrice)}</td>
@@ -2059,7 +2081,19 @@ function EditableLaborRow({
 
   return (
     <tr className="border-b border-gray-50">
-      <td className="py-1.5 text-gray-700">{item.description}</td>
+      <td className="py-1.5">
+        <div className="text-gray-700">{item.description}</div>
+        <select
+          value={item.mechanic?.id || ''}
+          onChange={(e) => onChangeMechanic(item.id, e.target.value || null)}
+          className="mt-0.5 w-full rounded border border-gray-200 bg-gray-50 px-1 py-0.5 text-[10px] text-gray-500 focus:border-primary-400 focus:outline-none"
+        >
+          <option value="">Мастер...</option>
+          {mechanics.map((m) => (
+            <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+          ))}
+        </select>
+      </td>
       <td className="py-1.5 text-right">
         <input type="number" value={price} onChange={(e) => changePrice(e.target.value)} onBlur={save} onKeyDown={handleKeyDown} min={0} step={100} className={editCls} />
       </td>
@@ -2342,8 +2376,10 @@ function ItemsSection({
   onAddPart,
   onDeleteItem,
   onUpdateItem,
+  mechanics,
+  onChangeMechanic,
 }: {
-  items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; recommended: boolean; approvedByClient: boolean | null }[];
+  items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; recommended: boolean; approvedByClient: boolean | null; mechanic?: { id: string; firstName: string; lastName: string } | null }[];
   totalLabor: string | number;
   totalParts: string | number;
   totalAmount: string | number;
@@ -2365,6 +2401,8 @@ function ItemsSection({
   onAddPart: () => void;
   onDeleteItem: (id: string) => void;
   onUpdateItem: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
+  mechanics: { id: string; firstName: string; lastName: string }[];
+  onChangeMechanic: (itemId: string, mechanicId: string | null) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<'LABOR' | 'PART'>('LABOR');
@@ -2432,8 +2470,10 @@ function ItemsSection({
                           key={item.id}
                           item={item}
                           isEditable={isEditable}
+                          mechanics={mechanics}
                           onUpdate={onUpdateItem}
                           onDelete={onDeleteItem}
+                          onChangeMechanic={onChangeMechanic}
                         />
                       ))}
                     </tbody>

@@ -106,6 +106,9 @@ class CreateItemDto {
 
   @IsOptional() @IsBoolean()
   recommended?: boolean;
+
+  @IsOptional() @IsUUID()
+  mechanicId?: string;
 }
 
 class UpdateItemDto {
@@ -123,6 +126,9 @@ class UpdateItemDto {
 
   @IsOptional() @IsBoolean()
   approvedByClient?: boolean;
+
+  @IsOptional() @IsString()
+  mechanicId?: string | null;
 }
 
 class CreateWorkLogDto {
