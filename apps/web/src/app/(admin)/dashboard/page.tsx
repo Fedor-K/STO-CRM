@@ -1509,7 +1509,7 @@ interface WorkOrderDetail {
   totalAmount: string | number;
   createdAt: string;
   client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
-  vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null; mileage: number | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   mechanic: { id: string; firstName: string; lastName: string } | null;
   items: {
@@ -1569,6 +1569,7 @@ function WorkOrderDetailModal({
   const [complaints, setComplaints] = useState('');
   const [checklist, setChecklist] = useState<InspectionChecklist>(createEmptyChecklist());
   const [mechanicId, setMechanicId] = useState('');
+  const [mileage, setMileage] = useState('');
   const [initialized, setInitialized] = useState(false);
 
   // Add item
@@ -1584,6 +1585,7 @@ function WorkOrderDetailModal({
       setChecklist({ ...createEmptyChecklist(), ...wo.inspectionChecklist });
     }
     setMechanicId(wo.mechanic?.id || '');
+    setMileage(wo.vehicle.mileage != null ? String(wo.vehicle.mileage) : '');
     setInitialized(true);
   }
 
@@ -1594,6 +1596,22 @@ function WorkOrderDetailModal({
     setSaving(true);
     setError('');
     try {
+      // Обновляем пробег на автомобиле (только в большую сторону)
+      const newMileage = mileage ? Number(mileage) : null;
+      if (wo && newMileage != null) {
+        const currentMileage = wo.vehicle.mileage || 0;
+        if (newMileage < currentMileage) {
+          setError('Пробег не может быть меньше текущего (' + currentMileage.toLocaleString('ru-RU') + ' км)');
+          setSaving(false);
+          return;
+        }
+        if (newMileage !== currentMileage) {
+          await apiFetch(`/vehicles/${wo.vehicle.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ mileage: newMileage }),
+          });
+        }
+      }
       await apiFetch(`/work-orders/${workOrderId}`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -1798,6 +1816,24 @@ function WorkOrderDetailModal({
                 </p>
                 {wo.vehicle.licensePlate && <p className="text-xs text-gray-600">{wo.vehicle.licensePlate}</p>}
                 {wo.vehicle.vin && <p className="text-xs text-gray-400 font-mono">{wo.vehicle.vin}</p>}
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <span className="text-xs text-gray-500">Пробег:</span>
+                  {isEditable ? (
+                    <input
+                      type="number"
+                      value={mileage}
+                      min={wo.vehicle.mileage || 0}
+                      onChange={(e) => setMileage(e.target.value)}
+                      placeholder="км"
+                      className="w-24 rounded border border-gray-300 px-1.5 py-0.5 text-xs text-gray-900 focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                    />
+                  ) : (
+                    <span className="text-xs font-medium text-gray-900">
+                      {wo.vehicle.mileage != null ? wo.vehicle.mileage.toLocaleString('ru-RU') : '—'}
+                    </span>
+                  )}
+                  <span className="text-xs text-gray-400">км</span>
+                </div>
               </div>
             </div>
 

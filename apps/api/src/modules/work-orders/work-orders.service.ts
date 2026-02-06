@@ -33,7 +33,7 @@ const workOrderInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true, email: true } },
   advisor: { select: { id: true, firstName: true, lastName: true } },
   mechanic: { select: { id: true, firstName: true, lastName: true } },
-  vehicle: { select: { id: true, make: true, model: true, licensePlate: true, year: true, vin: true } },
+  vehicle: { select: { id: true, make: true, model: true, licensePlate: true, year: true, vin: true, mileage: true } },
   items: {
     orderBy: { createdAt: 'asc' as const },
   },
