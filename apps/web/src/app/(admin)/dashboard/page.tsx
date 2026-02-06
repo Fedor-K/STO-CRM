@@ -1921,15 +1921,12 @@ function WorkOrderDetailModal({
 
             {/* Items — collapsible with tabs */}
             {(() => {
-              const regularItems = wo.items.filter((i) => !i.recommended);
-              const recommendedItems = wo.items.filter((i) => i.recommended);
+              const regularItems = wo.items.filter((i) => !i.recommended || i.approvedByClient === true);
+              const recommendedItems = wo.items.filter((i) => i.recommended && i.approvedByClient !== true);
               const regularTotal = regularItems.reduce((sum, i) => sum + Number(i.totalPrice), 0);
               const regularLabor = regularItems.filter((i) => i.type === 'LABOR').reduce((sum, i) => sum + Number(i.totalPrice), 0);
               const regularParts = regularItems.filter((i) => i.type === 'PART').reduce((sum, i) => sum + Number(i.totalPrice), 0);
-              const approvedRecommendedTotal = recommendedItems
-                .filter((i) => i.approvedByClient === true)
-                .reduce((sum, i) => sum + Number(i.totalPrice), 0);
-              const grandTotal = regularTotal + approvedRecommendedTotal;
+              const grandTotal = regularTotal;
               return (
                 <>
                   <ItemsSection
