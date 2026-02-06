@@ -27,11 +27,20 @@ export class UsersService {
 
   async findAll(
     tenantId: string,
-    params: { page: number; limit: number; sort: string; order: 'asc' | 'desc'; role?: UserRole },
+    params: { page: number; limit: number; sort: string; order: 'asc' | 'desc'; role?: UserRole; search?: string },
   ): Promise<PaginatedResponse<UserWithoutPassword>> {
-    const { page, limit, sort, order, role } = params;
+    const { page, limit, sort, order, role, search } = params;
     const skip = (page - 1) * limit;
-    const where = { tenantId, ...(role ? { role } : {}) };
+    const where: any = { tenantId, ...(role ? { role } : {}) };
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { middleName: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+      ];
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.user.findMany({

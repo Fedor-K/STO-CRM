@@ -86,13 +86,15 @@ export class UsersController {
   @Roles('users:read')
   @ApiOperation({ summary: 'Список пользователей' })
   @ApiQuery({ name: 'role', required: false, enum: UserRole })
-  findAll(@CurrentTenant() tenantId: string, @Query() query: PaginationDto & { role?: UserRole }) {
+  @ApiQuery({ name: 'search', required: false })
+  findAll(@CurrentTenant() tenantId: string, @Query() query: PaginationDto & { role?: UserRole; search?: string }) {
     return this.usersService.findAll(tenantId, {
       page: Number(query.page) || 1,
       limit: Number(query.limit) || 20,
       sort: query.sort ?? 'createdAt',
       order: query.order ?? 'desc',
       role: query.role,
+      search: query.search,
     });
   }
 
