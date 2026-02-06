@@ -497,15 +497,20 @@ function WorkOrderFunnelCard({ workOrder, onUpdate, onClick }: { workOrder: Work
           {formatShortDate(workOrder.createdAt)}
         </span>
       </div>
-      {next && (
-        <button
-          onClick={handleNext}
-          disabled={loading}
-          className="mt-1.5 w-full rounded bg-primary-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-        >
-          {loading ? '...' : next.label}
-        </button>
-      )}
+      {next && (() => {
+        const MECHANIC_REQUIRED = ['NEW', 'DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED'];
+        const needsMechanic = MECHANIC_REQUIRED.includes(workOrder.status) && !workOrder.mechanic?.id;
+        return (
+          <button
+            onClick={handleNext}
+            disabled={loading || needsMechanic}
+            title={needsMechanic ? 'Назначьте механика' : undefined}
+            className="mt-1.5 w-full rounded bg-primary-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? '...' : next.label}
+          </button>
+        );
+      })()}
     </div>
   );
 }
@@ -1923,15 +1928,20 @@ function WorkOrderDetailModal({
                   {saving ? '...' : 'Сохранить'}
                 </button>
               )}
-              {next && (
-                <button
-                  onClick={handleNextStatus}
-                  disabled={saving}
-                  className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-                >
-                  {saving ? '...' : next.label}
-                </button>
-              )}
+              {next && (() => {
+                const MECHANIC_REQUIRED = ['NEW', 'DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED'];
+                const needsMechanic = MECHANIC_REQUIRED.includes(wo?.status || '') && !mechanicId;
+                return (
+                  <button
+                    onClick={handleNextStatus}
+                    disabled={saving || needsMechanic}
+                    title={needsMechanic ? 'Назначьте механика' : undefined}
+                    className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? '...' : next.label}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         ) : (
