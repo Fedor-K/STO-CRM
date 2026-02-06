@@ -41,7 +41,8 @@ interface WorkOrderCard {
   client: { id: string; firstName: string; lastName: string; phone: string | null };
   mechanic: { id: string; firstName: string; lastName: string } | null;
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
-  _count: { items: number };
+  items: { type: string; recommended: boolean; approvedByClient: boolean | null }[];
+  _count: { items: number; workLogs: number };
 }
 
 interface CancelledAppointment extends AppointmentCard {
@@ -440,6 +441,8 @@ const WO_NEXT_STATUS: Record<string, { status: string; label: string }> = {
 function WorkOrderFunnelCard({ workOrder, onUpdate, onClick }: { workOrder: WorkOrderCard; onUpdate: () => void; onClick: () => void }) {
   const [loading, setLoading] = useState(false);
   const next = WO_NEXT_STATUS[workOrder.status];
+  const laborItems = (workOrder.items || []).filter((i) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true));
+  const needsLogs = workOrder.status === 'IN_PROGRESS' && next?.status === 'COMPLETED' && (workOrder._count?.workLogs ?? 0) < laborItems.length;
 
   async function handleNext(e: React.MouseEvent) {
     e.preventDefault();
@@ -506,8 +509,8 @@ function WorkOrderFunnelCard({ workOrder, onUpdate, onClick }: { workOrder: Work
         return (
           <button
             onClick={handleNext}
-            disabled={loading || needsMechanic}
-            title={needsMechanic ? 'Назначьте механика' : undefined}
+            disabled={loading || needsMechanic || needsLogs}
+            title={needsMechanic ? 'Назначьте механика' : needsLogs ? 'Отметьте все работы в Логах работ' : undefined}
             className="mt-1.5 w-full rounded bg-primary-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? '...' : next.label}

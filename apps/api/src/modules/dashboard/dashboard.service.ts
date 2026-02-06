@@ -10,7 +10,8 @@ const workOrderFunnelInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true } },
   mechanic: { select: { id: true, firstName: true, lastName: true } },
   vehicle: { select: { id: true, make: true, model: true, licensePlate: true, mileage: true } },
-  _count: { select: { items: true } },
+  items: { select: { type: true, recommended: true, approvedByClient: true } },
+  _count: { select: { items: true, workLogs: true } },
 };
 
 @Injectable()
