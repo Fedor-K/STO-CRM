@@ -502,6 +502,7 @@ function WorkLogsTab({
   onComplete: () => void;
 }) {
   const [completing, setCompleting] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   const laborItems = workOrder.items.filter(
     (i) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true),
@@ -526,6 +527,7 @@ function WorkLogsTab({
   async function handleToggle(item: WorkOrderItem) {
     if (completedItemIds.has(item.id)) return;
     setCompleting(item.id);
+    setError('');
     try {
       await apiFetch(`/work-orders/${workOrder.id}/work-logs`, {
         method: 'POST',
@@ -535,6 +537,8 @@ function WorkLogsTab({
         }),
       });
       onComplete();
+    } catch (err: any) {
+      setError(err.message || 'Ошибка при сохранении');
     } finally {
       setCompleting(null);
     }
@@ -542,6 +546,9 @@ function WorkLogsTab({
 
   return (
     <div className="mt-4">
+      {error && (
+        <div className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+      )}
       {laborItems.length === 0 ? (
         <div className="py-8 text-center text-sm text-gray-500">Нет согласованных работ</div>
       ) : (
