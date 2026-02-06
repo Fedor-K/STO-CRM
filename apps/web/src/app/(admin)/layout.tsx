@@ -10,6 +10,7 @@ const navigation = [
   { name: 'Дашборд', href: '/dashboard' },
   { name: 'Клиенты', href: '/clients' },
   { name: 'Календарь', href: '/calendar' },
+  { name: 'Заявки', href: '/appointments' },
   { name: 'Заказ-наряды', href: '/work-orders' },
   { name: 'Автомобили', href: '/vehicles' },
   { name: 'Услуги', href: '/services' },
