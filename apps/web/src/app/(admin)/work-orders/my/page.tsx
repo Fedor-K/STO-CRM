@@ -87,6 +87,7 @@ export default function MyWorkOrdersPage() {
                 <div className="text-xs text-gray-500">
                   {wo.vehicle.make} {wo.vehicle.model}
                   {wo.vehicle.licensePlate ? ` • ${wo.vehicle.licensePlate}` : ''}
+                  {wo.vehicle.mileage != null ? ` • ${wo.vehicle.mileage.toLocaleString('ru-RU')} км` : ''}
                 </div>
                 {wo.clientComplaints && (
                   <div className="mt-1 line-clamp-2 text-xs text-gray-400">{wo.clientComplaints}</div>

@@ -6,7 +6,7 @@ import { Appointment, AppointmentStatus } from '@prisma/client';
 const appointmentInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true, email: true } },
   advisor: { select: { id: true, firstName: true, lastName: true } },
-  vehicle: { select: { id: true, make: true, model: true, licensePlate: true, year: true } },
+  vehicle: { select: { id: true, make: true, model: true, licensePlate: true, year: true, mileage: true } },
 };
 
 @Injectable()

@@ -103,6 +103,7 @@ export default function MyOrdersPage() {
                   <div className="mt-2 text-sm text-gray-700">
                     {wo.vehicle.make} {wo.vehicle.model}
                     {wo.vehicle.licensePlate ? ` • ${wo.vehicle.licensePlate}` : ''}
+                    {wo.vehicle.mileage != null ? ` • ${wo.vehicle.mileage.toLocaleString('ru-RU')} км` : ''}
                   </div>
 
                   {wo.clientComplaints && (

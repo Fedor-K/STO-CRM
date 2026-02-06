@@ -74,7 +74,7 @@ const workOrderInclude = {
 const workOrderListInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true } },
   mechanic: { select: { id: true, firstName: true, lastName: true } },
-  vehicle: { select: { id: true, make: true, model: true, licensePlate: true } },
+  vehicle: { select: { id: true, make: true, model: true, licensePlate: true, mileage: true } },
   _count: { select: { items: true } },
 };
 

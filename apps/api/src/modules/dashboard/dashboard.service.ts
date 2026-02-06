@@ -3,13 +3,13 @@ import { PrismaService } from '../../database/prisma.service';
 
 const appointmentFunnelInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true } },
-  vehicle: { select: { id: true, make: true, model: true, licensePlate: true } },
+  vehicle: { select: { id: true, make: true, model: true, licensePlate: true, mileage: true } },
 };
 
 const workOrderFunnelInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true } },
   mechanic: { select: { id: true, firstName: true, lastName: true } },
-  vehicle: { select: { id: true, make: true, model: true, licensePlate: true } },
+  vehicle: { select: { id: true, make: true, model: true, licensePlate: true, mileage: true } },
   _count: { select: { items: true } },
 };
 

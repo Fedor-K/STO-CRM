@@ -245,6 +245,9 @@ export default function WorkOrderDetailPage() {
             {wo.vehicle.vin && (
               <div className="text-xs text-gray-400">VIN: {wo.vehicle.vin}</div>
             )}
+            {wo.vehicle.mileage != null && (
+              <div className="text-xs text-gray-500">Пробег: {wo.vehicle.mileage.toLocaleString('ru-RU')} км</div>
+            )}
           </div>
         </div>
 

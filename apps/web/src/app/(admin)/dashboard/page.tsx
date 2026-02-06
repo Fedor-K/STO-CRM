@@ -28,7 +28,7 @@ interface AppointmentCard {
   status: string;
   notes: string | null;
   client: { id: string; firstName: string; lastName: string; phone: string | null };
-  vehicle: { id: string; make: string; model: string; licensePlate: string | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
 }
 
 interface WorkOrderCard {
@@ -40,7 +40,7 @@ interface WorkOrderCard {
   createdAt: string;
   client: { id: string; firstName: string; lastName: string; phone: string | null };
   mechanic: { id: string; firstName: string; lastName: string } | null;
-  vehicle: { id: string; make: string; model: string; licensePlate: string | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
   _count: { items: number };
 }
 
@@ -328,6 +328,7 @@ function CancelledColumnSection({ cancelled }: { cancelled: CancelledAppointment
               </p>
               <p className="text-[10px] text-gray-500">
                 {a.vehicle.make} {a.vehicle.model}
+                {a.vehicle.mileage != null ? ` • ${a.vehicle.mileage.toLocaleString('ru-RU')} км` : ''}
               </p>
               <div className="mt-1 flex items-center justify-between">
                 <span className="rounded bg-red-50 px-1 py-0.5 text-[10px] font-medium text-red-700">
@@ -407,6 +408,7 @@ function AppointmentFunnelCard({
       <div className="mt-1 text-[11px] text-gray-500">
         {appointment.vehicle.make} {appointment.vehicle.model}
         {appointment.vehicle.licensePlate ? ` • ${appointment.vehicle.licensePlate}` : ''}
+        {appointment.vehicle.mileage != null ? ` • ${appointment.vehicle.mileage.toLocaleString('ru-RU')} км` : ''}
       </div>
       <div className="mt-0.5 text-[11px] text-gray-400">
         {formatDate(appointment.scheduledStart)}
@@ -483,6 +485,7 @@ function WorkOrderFunnelCard({ workOrder, onUpdate, onClick }: { workOrder: Work
       <div className="mt-0.5 text-[11px] text-gray-500">
         {workOrder.vehicle.make} {workOrder.vehicle.model}
         {workOrder.vehicle.licensePlate ? ` • ${workOrder.vehicle.licensePlate}` : ''}
+        {workOrder.vehicle.mileage != null ? ` • ${workOrder.vehicle.mileage.toLocaleString('ru-RU')} км` : ''}
       </div>
       {workOrder.mechanic && (
         <div className="mt-0.5 text-[11px] text-gray-500">
@@ -924,7 +927,7 @@ interface AppointmentDetail {
   source: string | null;
   adChannel: string | null;
   client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
-  vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; mileage: number | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   plannedItems: PlannedItem[] | null;
 }
@@ -1192,6 +1195,9 @@ function AppointmentDetailModal({
               </p>
               {appointment.vehicle.licensePlate && (
                 <p className="text-xs text-gray-600">{appointment.vehicle.licensePlate}</p>
+              )}
+              {appointment.vehicle.mileage != null && (
+                <p className="text-xs text-gray-500">{appointment.vehicle.mileage.toLocaleString('ru-RU')} км</p>
               )}
             </div>
 

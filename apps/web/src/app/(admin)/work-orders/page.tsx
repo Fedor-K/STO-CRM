@@ -139,6 +139,9 @@ export default function WorkOrdersPage() {
                       {wo.vehicle.licensePlate && (
                         <div className="text-xs font-mono text-gray-500">{wo.vehicle.licensePlate}</div>
                       )}
+                      {wo.vehicle.mileage != null && (
+                        <div className="text-xs text-gray-400">{wo.vehicle.mileage.toLocaleString('ru-RU')} км</div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {wo.mechanic ? `${wo.mechanic.firstName} ${wo.mechanic.lastName}` : '—'}
