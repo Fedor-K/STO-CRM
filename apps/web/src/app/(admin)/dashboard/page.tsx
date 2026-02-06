@@ -956,6 +956,7 @@ function AppointmentDetailModal({
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [subModal, setSubModal] = useState<'client' | 'vehicle' | null>(null);
 
   const { data: appointment, isLoading, refetch: refetchAppt } = useQuery<AppointmentDetail>({
     queryKey: ['appointment-detail', appointmentId],
@@ -1164,6 +1165,7 @@ function AppointmentDetailModal({
   const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${column === 'estimating' ? 'max-w-2xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
@@ -1177,8 +1179,8 @@ function AppointmentDetailModal({
           <div className="py-8 text-center text-gray-500">Загрузка...</div>
         ) : appointment ? (
           <div className="mt-4 space-y-4">
-            {/* Client info (read-only) */}
-            <div className="rounded-lg bg-gray-50 p-3">
+            {/* Client info */}
+            <div className="cursor-pointer rounded-lg bg-gray-50 p-3 transition-colors hover:bg-primary-50/50 hover:ring-1 hover:ring-primary-300" onClick={() => setSubModal('client')}>
               <p className="text-xs font-medium text-gray-500">Клиент</p>
               <p className="text-sm font-semibold text-gray-900">
                 {appointment.client.firstName} {appointment.client.lastName}
@@ -1191,8 +1193,8 @@ function AppointmentDetailModal({
               )}
             </div>
 
-            {/* Vehicle info (read-only) */}
-            <div className="rounded-lg bg-gray-50 p-3">
+            {/* Vehicle info */}
+            <div className="cursor-pointer rounded-lg bg-gray-50 p-3 transition-colors hover:bg-primary-50/50 hover:ring-1 hover:ring-primary-300" onClick={() => setSubModal('vehicle')}>
               <p className="text-xs font-medium text-gray-500">Автомобиль</p>
               <p className="text-sm font-semibold text-gray-900">
                 {appointment.vehicle.make} {appointment.vehicle.model}
@@ -1500,6 +1502,194 @@ function AppointmentDetailModal({
           </div>
         ) : (
           <div className="py-8 text-center text-red-500">Не удалось загрузить данные</div>
+        )}
+      </div>
+    </div>
+
+    {subModal === 'client' && appointment && (
+      <ClientHistoryModal clientId={appointment.client.id} client={appointment.client} onClose={() => setSubModal(null)} />
+    )}
+    {subModal === 'vehicle' && appointment && (
+      <VehicleHistoryModal vehicleId={appointment.vehicle.id} vehicle={appointment.vehicle} onClose={() => setSubModal(null)} />
+    )}
+    </>
+  );
+}
+
+// --- Client History Modal ---
+
+function ClientHistoryModal({
+  clientId,
+  client,
+  onClose,
+}: {
+  clientId: string;
+  client: { firstName: string; lastName: string; phone: string | null; email: string | null };
+  onClose: () => void;
+}) {
+  const { data: fullClient } = useQuery<{
+    id: string; firstName: string; lastName: string; middleName: string | null;
+    phone: string | null; email: string | null; dateOfBirth: string | null; createdAt: string;
+  }>({
+    queryKey: ['client-history', clientId],
+    queryFn: () => apiFetch(`/users/${clientId}`),
+  });
+
+  const { data: workOrders } = useQuery<{
+    data: { id: string; orderNumber: string; status: string; totalAmount: string | number; createdAt: string;
+      vehicle: { make: string; model: string; licensePlate: string | null } }[];
+    meta: { total: number };
+  }>({
+    queryKey: ['client-history-wo', clientId],
+    queryFn: () => apiFetch(`/work-orders?clientId=${clientId}&limit=50&sort=createdAt&order=desc`),
+  });
+
+  const c = fullClient || client;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">Клиент</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-gray-200 p-4">
+          <div className="text-lg font-medium text-gray-900">
+            {c.firstName} {c.lastName} {(fullClient as any)?.middleName || ''}
+          </div>
+          {c.phone && <div className="mt-1 text-sm text-gray-600">{c.phone}</div>}
+          {c.email && <div className="text-sm text-gray-600">{c.email}</div>}
+          {fullClient?.dateOfBirth && (
+            <div className="mt-1 text-sm text-gray-500">
+              Дата рождения: {new Date(fullClient.dateOfBirth).toLocaleDateString('ru-RU')}
+            </div>
+          )}
+          {fullClient?.createdAt && (
+            <div className="text-sm text-gray-500">
+              Клиент с: {new Date(fullClient.createdAt).toLocaleDateString('ru-RU')}
+            </div>
+          )}
+        </div>
+
+        <h3 className="mt-5 text-sm font-semibold uppercase text-gray-500">
+          История заказов {workOrders?.meta?.total != null && `(${workOrders.meta.total})`}
+        </h3>
+
+        {!workOrders ? (
+          <div className="mt-3 text-center text-sm text-gray-500">Загрузка...</div>
+        ) : workOrders.data.length === 0 ? (
+          <div className="mt-3 text-center text-sm text-gray-500">Заказов нет</div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {workOrders.data.map((wo) => (
+              <a
+                key={wo.id}
+                href={`/work-orders/${wo.id}`}
+                className="block rounded-lg border border-gray-200 p-3 transition-colors hover:border-primary-300 hover:bg-primary-50/30"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-primary-600">{wo.orderNumber}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CARD_BADGE_COLORS[wo.status] || 'bg-gray-100 text-gray-600'}`}>
+                    {STATUS_LABELS[wo.status] || wo.status}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-sm">
+                  <span className="text-gray-500">
+                    {wo.vehicle.make} {wo.vehicle.model}
+                    {wo.vehicle.licensePlate ? ` \u00B7 ${wo.vehicle.licensePlate}` : ''}
+                  </span>
+                  <span className="font-medium text-gray-900">{formatMoney(wo.totalAmount)}</span>
+                </div>
+                <div className="mt-0.5 text-xs text-gray-400">
+                  {new Date(wo.createdAt).toLocaleDateString('ru-RU')}
+                </div>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// --- Vehicle History Modal ---
+
+function VehicleHistoryModal({
+  vehicleId,
+  vehicle,
+  onClose,
+}: {
+  vehicleId: string;
+  vehicle: { make: string; model: string; licensePlate: string | null; year: number | null; mileage: number | null };
+  onClose: () => void;
+}) {
+  const { data: fullVehicle } = useQuery<{
+    id: string; make: string; model: string; year: number | null; vin: string | null;
+    licensePlate: string | null; color: string | null; mileage: number | null; createdAt: string;
+    client: { id: string; firstName: string; lastName: string; phone: string | null; email: string };
+    workOrders: { id: string; orderNumber: string; status: string; totalAmount: string | number; createdAt: string }[];
+  }>({
+    queryKey: ['vehicle-history', vehicleId],
+    queryFn: () => apiFetch(`/vehicles/${vehicleId}`),
+  });
+
+  const v = fullVehicle || vehicle;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-gray-900">Автомобиль</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-gray-200 p-4">
+          <div className="text-lg font-medium text-gray-900">
+            {v.make} {v.model} {v.year ? `(${v.year})` : ''}
+          </div>
+          {v.licensePlate && <div className="mt-1 font-mono text-sm text-gray-600">{v.licensePlate}</div>}
+          {fullVehicle?.vin && <div className="text-xs text-gray-500">VIN: {fullVehicle.vin}</div>}
+          {fullVehicle?.color && <div className="text-sm text-gray-500">Цвет: {fullVehicle.color}</div>}
+          {v.mileage != null && (
+            <div className="text-sm text-gray-500">Пробег: {v.mileage.toLocaleString('ru-RU')} км</div>
+          )}
+          {fullVehicle?.client && (
+            <div className="mt-2 text-sm text-gray-500">
+              Владелец: {fullVehicle.client.firstName} {fullVehicle.client.lastName}
+            </div>
+          )}
+        </div>
+
+        <h3 className="mt-5 text-sm font-semibold uppercase text-gray-500">
+          История заказов {fullVehicle?.workOrders && `(${fullVehicle.workOrders.length})`}
+        </h3>
+
+        {!fullVehicle ? (
+          <div className="mt-3 text-center text-sm text-gray-500">Загрузка...</div>
+        ) : fullVehicle.workOrders.length === 0 ? (
+          <div className="mt-3 text-center text-sm text-gray-500">Заказов нет</div>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {fullVehicle.workOrders.map((wo) => (
+              <a
+                key={wo.id}
+                href={`/work-orders/${wo.id}`}
+                className="block rounded-lg border border-gray-200 p-3 transition-colors hover:border-primary-300 hover:bg-primary-50/30"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-primary-600">{wo.orderNumber}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CARD_BADGE_COLORS[wo.status] || 'bg-gray-100 text-gray-600'}`}>
+                    {STATUS_LABELS[wo.status] || wo.status}
+                  </span>
+                </div>
+                <div className="mt-1 text-sm font-medium text-gray-900">{formatMoney(wo.totalAmount)}</div>
+                <div className="mt-0.5 text-xs text-gray-400">
+                  {new Date(wo.createdAt).toLocaleDateString('ru-RU')}
+                </div>
+              </a>
+            ))}
+          </div>
         )}
       </div>
     </div>
