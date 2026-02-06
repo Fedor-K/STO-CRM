@@ -508,7 +508,8 @@ export class WorkOrdersService {
     let totalParts = 0;
 
     for (const item of items) {
-      if (item.approvedByClient === false) continue; // отклонённые не считаем
+      // Рекомендованные считаем только если одобрены клиентом
+      if (item.recommended && item.approvedByClient !== true) continue;
       const price = Number(item.totalPrice);
       if (item.type === 'LABOR') {
         totalLabor += price;
