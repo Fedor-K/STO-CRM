@@ -1925,6 +1925,7 @@ function WorkOrderDetailModal({
                     onDeleteItem={handleDeleteItem}
                     onUpdateItem={handleUpdateItem}
                     mechanics={mechanics?.data || []}
+                    defaultMechanicId={mechanicId}
                     onChangeMechanic={handleChangeItemMechanic}
                   />
 
@@ -2013,6 +2014,7 @@ function EditableLaborRow({
   item,
   isEditable,
   mechanics,
+  defaultMechanicId,
   onUpdate,
   onDelete,
   onChangeMechanic,
@@ -2020,6 +2022,7 @@ function EditableLaborRow({
   item: ItemRow;
   isEditable: boolean;
   mechanics: { id: string; firstName: string; lastName: string }[];
+  defaultMechanicId: string;
   onUpdate: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
   onDelete: (id: string) => void;
   onChangeMechanic: (itemId: string, mechanicId: string | null) => void;
@@ -2064,12 +2067,15 @@ function EditableLaborRow({
     if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
   }
 
+  const effectiveMechanicId = item.mechanic?.id || defaultMechanicId;
+  const effectiveMechanic = item.mechanic || mechanics.find((m) => m.id === defaultMechanicId) || null;
+
   if (!isEditable) {
     return (
       <tr className="border-b border-gray-50">
         <td className="py-1.5">
           <div className="text-gray-700">{item.description}</div>
-          {item.mechanic && <div className="text-[10px] text-gray-400">{item.mechanic.firstName} {item.mechanic.lastName}</div>}
+          {effectiveMechanic && <div className="text-[10px] text-gray-400">{effectiveMechanic.firstName} {effectiveMechanic.lastName}</div>}
         </td>
         <td className="py-1.5 text-right text-gray-600">{formatMoney(item.unitPrice)}</td>
         <td className="py-1.5 text-right text-gray-600">{item.normHours ?? Number(item.quantity)}</td>
@@ -2084,7 +2090,7 @@ function EditableLaborRow({
       <td className="py-1.5">
         <div className="text-gray-700">{item.description}</div>
         <select
-          value={item.mechanic?.id || ''}
+          value={effectiveMechanicId || ''}
           onChange={(e) => onChangeMechanic(item.id, e.target.value || null)}
           className="mt-0.5 w-full rounded border border-gray-200 bg-gray-50 px-1 py-0.5 text-[10px] text-gray-500 focus:border-primary-400 focus:outline-none"
         >
@@ -2402,6 +2408,7 @@ function ItemsSection({
   onDeleteItem: (id: string) => void;
   onUpdateItem: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
   mechanics: { id: string; firstName: string; lastName: string }[];
+  defaultMechanicId: string;
   onChangeMechanic: (itemId: string, mechanicId: string | null) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
@@ -2471,6 +2478,7 @@ function ItemsSection({
                           item={item}
                           isEditable={isEditable}
                           mechanics={mechanics}
+                          defaultMechanicId={defaultMechanicId}
                           onUpdate={onUpdateItem}
                           onDelete={onDeleteItem}
                           onChangeMechanic={onChangeMechanic}
