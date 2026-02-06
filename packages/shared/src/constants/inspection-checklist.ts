@@ -15,15 +15,32 @@ export interface InspectionChecklistEntry {
   level?: number; // 0-100, для жидкостей (масло, ОЖ и т.д.)
 }
 
-/** Пункты, у которых есть ползунок уровня заполнения */
-export const LEVEL_ITEMS = new Set([
-  'urovenMotornogMasla',
-  'tormoznayaZhidkost',
-  'urovenMaslaKpp',
-  'urovenMaslaGur',
-  'ohlazhdayushhayaZhidkost',
-  'stekloomyvayushhayaZhidkost',
-]);
+export interface SliderConfig {
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
+  label: string;
+  defaultValue: number;
+}
+
+/** Пункты, у которых есть ползунок */
+export const SLIDER_CONFIG: Record<string, SliderConfig> = {
+  // Уровни жидкостей (0–100%)
+  urovenMotornogMasla:        { min: 0, max: 100, step: 5,   unit: '%', label: 'Уровень', defaultValue: 50 },
+  urovenMaslaKpp:             { min: 0, max: 100, step: 5,   unit: '%', label: 'Уровень', defaultValue: 50 },
+  urovenMaslaGur:             { min: 0, max: 100, step: 5,   unit: '%', label: 'Уровень', defaultValue: 50 },
+  ohlazhdayushhayaZhidkost:   { min: 0, max: 100, step: 5,   unit: '%', label: 'Уровень', defaultValue: 50 },
+  stekloomyvayushhayaZhidkost:{ min: 0, max: 100, step: 5,   unit: '%', label: 'Уровень', defaultValue: 50 },
+  // Тормозная жидкость — содержание влаги (0–5%)
+  tormoznayaZhidkost:         { min: 0, max: 5,   step: 0.1, unit: '%', label: 'Влага',   defaultValue: 0 },
+  // Тормозные колодки — остаток (0–100%)
+  perednieTormoznyeKolodki:   { min: 0, max: 100, step: 5,   unit: '%', label: 'Остаток', defaultValue: 100 },
+  zadnieTormoznyeKolodki:     { min: 0, max: 100, step: 5,   unit: '%', label: 'Остаток', defaultValue: 100 },
+};
+
+/** @deprecated Use SLIDER_CONFIG instead */
+export const LEVEL_ITEMS = new Set(Object.keys(SLIDER_CONFIG));
 
 export type InspectionChecklist = Record<string, InspectionChecklistEntry>;
 

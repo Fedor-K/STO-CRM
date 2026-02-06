@@ -7,7 +7,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   INSPECTION_GROUPS,
-  LEVEL_ITEMS,
+  SLIDER_CONFIG,
   createEmptyChecklist,
   type InspectionChecklist,
 } from '@sto-crm/shared';
@@ -878,17 +878,22 @@ function InspectionChecklistReadonly({ checklist }: { checklist: InspectionCheck
                         </span>
                         <div className="flex-1 min-w-0">
                           <span className={`text-sm ${entry?.checked ? 'text-gray-900' : 'text-gray-500'}`}>{item.label}</span>
-                          {LEVEL_ITEMS.has(item.key) && entry?.level != null && (
-                            <div className="mt-0.5 flex items-center gap-2">
-                              <div className="h-1.5 flex-1 rounded-full bg-gray-200">
-                                <div
-                                  className={`h-1.5 rounded-full ${entry.level > 60 ? 'bg-green-500' : entry.level > 25 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                                  style={{ width: `${entry.level}%` }}
-                                />
+                          {SLIDER_CONFIG[item.key] && entry?.level != null && (() => {
+                            const cfg = SLIDER_CONFIG[item.key];
+                            const pct = ((entry.level - cfg.min) / (cfg.max - cfg.min)) * 100;
+                            const barColor = cfg.label === 'Влага'
+                              ? (entry.level < 2 ? 'bg-green-500' : entry.level < 3.5 ? 'bg-yellow-500' : 'bg-red-500')
+                              : (pct > 60 ? 'bg-green-500' : pct > 25 ? 'bg-yellow-500' : 'bg-red-500');
+                            return (
+                              <div className="mt-0.5 flex items-center gap-2">
+                                <span className="text-[10px] text-gray-400 w-10">{cfg.label}</span>
+                                <div className="h-1.5 flex-1 rounded-full bg-gray-200">
+                                  <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className="w-10 text-right text-[11px] font-medium text-gray-600">{entry.level}{cfg.unit}</span>
                               </div>
-                              <span className="w-8 text-right text-[11px] font-medium text-gray-600">{entry.level}%</span>
-                            </div>
-                          )}
+                            );
+                          })()}
                           {entry?.note && (
                             <p className="text-xs text-gray-500 italic">{entry.note}</p>
                           )}

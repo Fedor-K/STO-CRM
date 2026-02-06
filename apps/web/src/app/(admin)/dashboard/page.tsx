@@ -7,7 +7,7 @@ import { useAuth } from '@/providers/auth-provider';
 import Link from 'next/link';
 import {
   INSPECTION_GROUPS,
-  LEVEL_ITEMS,
+  SLIDER_CONFIG,
   createEmptyChecklist,
   type InspectionChecklist,
 } from '@sto-crm/shared';
@@ -1821,6 +1821,10 @@ function WorkOrderDetailModal({
               const regularTotal = regularItems.reduce((sum, i) => sum + Number(i.totalPrice), 0);
               const regularLabor = regularItems.filter((i) => i.type === 'LABOR').reduce((sum, i) => sum + Number(i.totalPrice), 0);
               const regularParts = regularItems.filter((i) => i.type === 'PART').reduce((sum, i) => sum + Number(i.totalPrice), 0);
+              const approvedRecommendedTotal = recommendedItems
+                .filter((i) => i.approvedByClient !== false)
+                .reduce((sum, i) => sum + Number(i.totalPrice), 0);
+              const grandTotal = regularTotal + approvedRecommendedTotal;
               return (
                 <>
                   <ItemsSection
@@ -1857,6 +1861,12 @@ function WorkOrderDetailModal({
                       onDeleteItem={handleDeleteItem}
                     />
                   )}
+
+                  {/* Общая сумма */}
+                  <div className="flex items-center justify-between rounded-lg border border-gray-300 bg-gray-50 px-4 py-3">
+                    <span className="text-sm font-semibold text-gray-700">Общая сумма</span>
+                    <span className="text-lg font-bold text-gray-900">{formatMoney(grandTotal)}</span>
+                  </div>
                 </>
               );
             })()}
@@ -2152,20 +2162,25 @@ function InspectionChecklistEditor({
                           />
                           <div className="flex-1 min-w-0">
                             <span className="text-xs text-gray-700">{item.label}</span>
-                            {LEVEL_ITEMS.has(item.key) && (
-                              <div className="mt-1 flex items-center gap-2">
-                                <input
-                                  type="range"
-                                  min={0}
-                                  max={100}
-                                  step={5}
-                                  value={entry.level ?? 50}
-                                  onChange={(e) => setLevel(item.key, Number(e.target.value))}
-                                  className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-gray-200 accent-primary-600"
-                                />
-                                <span className="w-8 text-right text-[11px] font-medium text-gray-600">{entry.level ?? 50}%</span>
-                              </div>
-                            )}
+                            {SLIDER_CONFIG[item.key] && (() => {
+                              const cfg = SLIDER_CONFIG[item.key];
+                              const val = entry.level ?? cfg.defaultValue;
+                              return (
+                                <div className="mt-1 flex items-center gap-2">
+                                  <span className="text-[10px] text-gray-400 w-10">{cfg.label}</span>
+                                  <input
+                                    type="range"
+                                    min={cfg.min}
+                                    max={cfg.max}
+                                    step={cfg.step}
+                                    value={val}
+                                    onChange={(e) => setLevel(item.key, Number(e.target.value))}
+                                    className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-gray-200 accent-primary-600"
+                                  />
+                                  <span className="w-10 text-right text-[11px] font-medium text-gray-600">{val}{cfg.unit}</span>
+                                </div>
+                              );
+                            })()}
                             <input
                               type="text"
                               value={entry.note}
