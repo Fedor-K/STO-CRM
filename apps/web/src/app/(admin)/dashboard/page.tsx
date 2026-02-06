@@ -2383,6 +2383,7 @@ function ItemsSection({
   onDeleteItem,
   onUpdateItem,
   mechanics,
+  defaultMechanicId,
   onChangeMechanic,
 }: {
   items: { id: string; type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null; recommended: boolean; approvedByClient: boolean | null; mechanic?: { id: string; firstName: string; lastName: string } | null }[];
