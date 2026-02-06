@@ -1814,7 +1814,13 @@ function WorkOrderDetailModal({
     if (wo.inspectionChecklist) {
       setChecklist({ ...createEmptyChecklist(), ...wo.inspectionChecklist });
     }
-    setMechanicId(wo.mechanic?.id || '');
+    // Use WO mechanic, or fallback to first mechanic from items
+    let initMechanicId = wo.mechanic?.id || '';
+    if (!initMechanicId && wo.items.length > 0) {
+      const firstItemMechanic = wo.items.find((i) => i.mechanics?.length > 0)?.mechanics[0]?.mechanic;
+      if (firstItemMechanic) initMechanicId = firstItemMechanic.id;
+    }
+    setMechanicId(initMechanicId);
     setMileage(wo.vehicle.mileage != null ? String(wo.vehicle.mileage) : '');
     setInitialized(true);
   }
