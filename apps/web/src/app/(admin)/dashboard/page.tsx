@@ -443,6 +443,12 @@ function WorkOrderFunnelCard({ workOrder, onUpdate, onClick }: { workOrder: Work
     e.preventDefault();
     e.stopPropagation();
     if (!next) return;
+    // Требуем механика для перехода в работу
+    if (next.status === 'IN_PROGRESS' && !workOrder.mechanic?.id) {
+      alert('Назначьте механика перед передачей в работу');
+      onClick(); // Открыть карточку для назначения механика
+      return;
+    }
     setLoading(true);
     try {
       await apiFetch(`/work-orders/${workOrder.id}/status`, {

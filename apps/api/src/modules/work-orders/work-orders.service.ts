@@ -339,6 +339,13 @@ export class WorkOrdersService {
       );
     }
 
+    // Требуем механика для перехода в статус "В работе"
+    if (newStatus === 'IN_PROGRESS' && !workOrder.mechanicId) {
+      throw new BadRequestException(
+        'Назначьте механика перед передачей заказ-наряда в работу',
+      );
+    }
+
     return this.prisma.workOrder.update({
       where: { id },
       data: { status: newStatus },
