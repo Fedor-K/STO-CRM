@@ -339,10 +339,15 @@ export class WorkOrdersService {
       );
     }
 
-    // Требуем механика для перехода в статус "В работе"
-    if (newStatus === 'IN_PROGRESS' && !workOrder.mechanicId) {
+    // Требуем механика для любого перехода вперёд (кроме отмены)
+    const MECHANIC_REQUIRED_STATUSES = ['NEW', 'DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED'];
+    if (
+      MECHANIC_REQUIRED_STATUSES.includes(workOrder.status) &&
+      newStatus !== 'CANCELLED' &&
+      !workOrder.mechanicId
+    ) {
       throw new BadRequestException(
-        'Назначьте механика перед передачей заказ-наряда в работу',
+        'Назначьте механика перед переводом заказ-наряда',
       );
     }
 
