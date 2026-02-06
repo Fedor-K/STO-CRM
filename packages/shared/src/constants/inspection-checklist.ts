@@ -14,6 +14,7 @@ export interface InspectionChecklistEntry {
   note: string;
   level?: number; // 0-100, для жидкостей (масло, ОЖ и т.д.)
   recommended?: boolean; // пункт добавлен как рекомендованная работа
+  recommendedDescription?: string; // название услуги для связи с WO item
 }
 
 export interface SliderConfig {

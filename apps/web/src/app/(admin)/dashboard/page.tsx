@@ -1918,6 +1918,22 @@ function WorkOrderDetailModal({
     }
   }
 
+  async function handleRemoveRecommendation(itemKey: string, description: string) {
+    // Find the recommended WO item matching this checklist entry
+    const item = wo?.items.find((i) => i.recommended && i.description === description);
+    if (!item) return;
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`/work-orders/${workOrderId}/items/${item.id}`, { method: 'DELETE' });
+      queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
+    } catch (err: any) {
+      setError(err.message || 'Ошибка удаления');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleApproveItem(itemId: string, approved: boolean) {
     setSaving(true);
     try {
@@ -2126,6 +2142,8 @@ function WorkOrderDetailModal({
                     onChange={setChecklist}
                     services={services?.data || []}
                     onAddService={handleAddServiceFromChecklist}
+                    onRemoveRecommendation={handleRemoveRecommendation}
+                    woItems={wo.items}
                   />
                 )}
 
@@ -2550,11 +2568,15 @@ function InspectionChecklistEditor({
   onChange,
   services,
   onAddService,
+  onRemoveRecommendation,
+  woItems,
 }: {
   checklist: InspectionChecklist;
   onChange: (c: InspectionChecklist) => void;
   services: { id: string; name: string; normHours: string | number | null }[];
   onAddService: (serviceId: string) => void;
+  onRemoveRecommendation: (itemKey: string, description: string) => void;
+  woItems: { id: string; description: string; recommended: boolean }[];
 }) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [suggestForItem, setSuggestForItem] = useState<string | null>(null);
@@ -2566,13 +2588,30 @@ function InspectionChecklistEditor({
 
   function toggleItem(itemKey: string) {
     const wasChecked = checklist[itemKey]?.checked;
-    onChange({
-      ...checklist,
-      [itemKey]: { ...checklist[itemKey], checked: !wasChecked },
-    });
-    if (!wasChecked) {
-      setSuggestForItem(itemKey);
-      setSuggestServiceId('');
+    const entry = checklist[itemKey];
+    if (wasChecked && entry?.recommended) {
+      // Unchecking an item that has a recommendation — find and remove WO item
+      const desc = entry.recommendedDescription;
+      if (desc) {
+        onRemoveRecommendation(itemKey, desc);
+      } else {
+        // Fallback for old entries without savedDescription: find last recommended item
+        const lastRec = [...woItems].reverse().find((i) => i.recommended);
+        if (lastRec) onRemoveRecommendation(itemKey, lastRec.description);
+      }
+      onChange({
+        ...checklist,
+        [itemKey]: { ...checklist[itemKey], checked: false, recommended: false, recommendedDescription: undefined },
+      });
+    } else {
+      onChange({
+        ...checklist,
+        [itemKey]: { ...checklist[itemKey], checked: !wasChecked },
+      });
+      if (!wasChecked) {
+        setSuggestForItem(itemKey);
+        setSuggestServiceId('');
+      }
     }
   }
 
@@ -2674,9 +2713,10 @@ function InspectionChecklistEditor({
                                 type="button"
                                 onClick={() => {
                                   if (suggestServiceId && suggestForItem) {
+                                    const svc = services.find((s) => s.id === suggestServiceId);
                                     onChange({
                                       ...checklist,
-                                      [suggestForItem]: { ...checklist[suggestForItem], recommended: true },
+                                      [suggestForItem]: { ...checklist[suggestForItem], recommended: true, recommendedDescription: svc?.name },
                                     });
                                     onAddService(suggestServiceId);
                                     setSuggestForItem(null);
