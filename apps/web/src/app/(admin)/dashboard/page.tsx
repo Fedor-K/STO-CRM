@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
@@ -1779,11 +1779,11 @@ function WorkOrderDetailModal({
     }
   }
 
-  async function handleAddItemMechanic(itemId: string, newMechanicId: string, contributionPercent?: number) {
+  async function handleAddItemMechanic(itemId: string, newMechanicId: string) {
     try {
       await apiFetch(`/work-orders/${workOrderId}/items/${itemId}/mechanics`, {
         method: 'POST',
-        body: JSON.stringify({ mechanicId: newMechanicId, contributionPercent: contributionPercent ?? 100 }),
+        body: JSON.stringify({ mechanicId: newMechanicId }),
       });
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
     } catch (err: any) {
@@ -2052,7 +2052,7 @@ function EditableLaborRow({
   defaultMechanicId: string;
   onUpdate: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
   onDelete: (id: string) => void;
-  onAddItemMechanic: (itemId: string, mechanicId: string, pct?: number) => void;
+  onAddItemMechanic: (itemId: string, mechanicId: string) => void;
   onUpdateItemMechanic: (itemId: string, entryId: string, pct: number) => void;
   onRemoveItemMechanic: (itemId: string, entryId: string) => void;
 }) {
@@ -2202,6 +2202,10 @@ function MechanicEntryRow({
   onRemove: (itemId: string, entryId: string) => void;
 }) {
   const [pct, setPct] = useState(entry.contributionPercent);
+
+  useEffect(() => {
+    setPct(entry.contributionPercent);
+  }, [entry.contributionPercent]);
 
   function savePct() {
     if (pct === entry.contributionPercent) return;
@@ -2536,7 +2540,7 @@ function ItemsSection({
   onUpdateItem: (id: string, data: { unitPrice?: number; quantity?: number; normHours?: number }) => void;
   mechanics: { id: string; firstName: string; lastName: string }[];
   defaultMechanicId: string;
-  onAddItemMechanic: (itemId: string, mechanicId: string, pct?: number) => void;
+  onAddItemMechanic: (itemId: string, mechanicId: string) => void;
   onUpdateItemMechanic: (itemId: string, entryId: string, pct: number) => void;
   onRemoveItemMechanic: (itemId: string, entryId: string) => void;
 }) {

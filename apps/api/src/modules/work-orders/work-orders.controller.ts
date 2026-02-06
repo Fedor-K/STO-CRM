@@ -131,9 +131,6 @@ class UpdateItemDto {
 class AddItemMechanicDto {
   @IsUUID()
   mechanicId!: string;
-
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(1)
-  contributionPercent?: number;
 }
 
 class UpdateItemMechanicDto {

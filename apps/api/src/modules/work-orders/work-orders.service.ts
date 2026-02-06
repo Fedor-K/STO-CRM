@@ -519,7 +519,7 @@ export class WorkOrdersService {
     tenantId: string,
     workOrderId: string,
     itemId: string,
-    data: { mechanicId: string; contributionPercent?: number },
+    data: { mechanicId: string },
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
 
@@ -528,16 +528,18 @@ export class WorkOrdersService {
     });
     if (!item) throw new NotFoundException('Позиция не найдена');
 
-    return this.prisma.workOrderItemMechanic.create({
+    await this.prisma.workOrderItemMechanic.create({
       data: {
         workOrderItemId: itemId,
         mechanicId: data.mechanicId,
-        contributionPercent: data.contributionPercent ?? 100,
-      },
-      include: {
-        mechanic: { select: { id: true, firstName: true, lastName: true } },
+        contributionPercent: 100,
       },
     });
+
+    // Redistribute evenly among all mechanics
+    await this.redistributePercentsEvenly(itemId);
+
+    return this.getItemWithMechanics(itemId);
   }
 
   async updateItemMechanic(
@@ -554,13 +556,17 @@ export class WorkOrdersService {
     });
     if (!entry) throw new NotFoundException('Запись механика не найдена');
 
-    return this.prisma.workOrderItemMechanic.update({
+    const clamped = Math.max(1, Math.min(100, Math.round(data.contributionPercent)));
+
+    // Update this entry, then redistribute remaining among others
+    await this.prisma.workOrderItemMechanic.update({
       where: { id: mechanicEntryId },
-      data: { contributionPercent: data.contributionPercent },
-      include: {
-        mechanic: { select: { id: true, firstName: true, lastName: true } },
-      },
+      data: { contributionPercent: clamped },
     });
+
+    await this.redistributeRemainder(itemId, mechanicEntryId, clamped);
+
+    return this.getItemWithMechanics(itemId);
   }
 
   async removeItemMechanic(
@@ -568,7 +574,7 @@ export class WorkOrdersService {
     workOrderId: string,
     itemId: string,
     mechanicEntryId: string,
-  ): Promise<void> {
+  ): Promise<any> {
     await this.findById(tenantId, workOrderId);
 
     const entry = await this.prisma.workOrderItemMechanic.findFirst({
@@ -579,6 +585,72 @@ export class WorkOrdersService {
     await this.prisma.workOrderItemMechanic.delete({
       where: { id: mechanicEntryId },
     });
+
+    // Redistribute among remaining mechanics
+    await this.redistributePercentsEvenly(itemId);
+
+    return this.getItemWithMechanics(itemId);
+  }
+
+  private async getItemWithMechanics(itemId: string) {
+    return this.prisma.workOrderItem.findUnique({
+      where: { id: itemId },
+      include: {
+        mechanics: {
+          include: {
+            mechanic: { select: { id: true, firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+  }
+
+  /** Split 100% evenly among all mechanics on an item */
+  private async redistributePercentsEvenly(itemId: string): Promise<void> {
+    const entries = await this.prisma.workOrderItemMechanic.findMany({
+      where: { workOrderItemId: itemId },
+    });
+    if (entries.length === 0) return;
+    if (entries.length === 1) {
+      await this.prisma.workOrderItemMechanic.update({
+        where: { id: entries[0].id },
+        data: { contributionPercent: 100 },
+      });
+      return;
+    }
+
+    const base = Math.floor(100 / entries.length);
+    const remainder = 100 - base * entries.length;
+
+    for (let i = 0; i < entries.length; i++) {
+      await this.prisma.workOrderItemMechanic.update({
+        where: { id: entries[i].id },
+        data: { contributionPercent: base + (i < remainder ? 1 : 0) },
+      });
+    }
+  }
+
+  /** After editing one entry's %, distribute the remaining (100 - edited%) among the others */
+  private async redistributeRemainder(
+    itemId: string,
+    editedEntryId: string,
+    editedPercent: number,
+  ): Promise<void> {
+    const others = await this.prisma.workOrderItemMechanic.findMany({
+      where: { workOrderItemId: itemId, id: { not: editedEntryId } },
+    });
+    if (others.length === 0) return;
+
+    const remaining = Math.max(0, 100 - editedPercent);
+    const base = Math.floor(remaining / others.length);
+    const remainder = remaining - base * others.length;
+
+    for (let i = 0; i < others.length; i++) {
+      await this.prisma.workOrderItemMechanic.update({
+        where: { id: others[i].id },
+        data: { contributionPercent: base + (i < remainder ? 1 : 0) },
+      });
+    }
   }
 
   // --- Work Logs ---
