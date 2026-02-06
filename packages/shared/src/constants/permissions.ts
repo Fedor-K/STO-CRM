@@ -100,6 +100,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     Permission['vehicles:read'],
     Permission['services:read'],
     Permission['work-orders:read'],
+    Permission['work-orders:update'],
     Permission['parts:read'],
   ],
 
