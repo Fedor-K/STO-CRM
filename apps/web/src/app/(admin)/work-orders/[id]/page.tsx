@@ -134,7 +134,6 @@ export default function WorkOrderDetailPage() {
   const [tab, setTab] = useState<'items' | 'logs' | 'activity'>('items');
   const [showAddItem, setShowAddItem] = useState(false);
   const [editItem, setEditItem] = useState<WorkOrderDetail['items'][0] | null>(null);
-  const [showAddLog, setShowAddLog] = useState(false);
 
   const { data: wo, isLoading } = useQuery<WorkOrderDetail>({
     queryKey: ['work-order', id],
@@ -334,7 +333,7 @@ export default function WorkOrderDetailPage() {
             onClick={() => setTab('logs')}
             className={`px-4 py-2 text-sm font-medium ${tab === 'logs' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
           >
-            Логи работ ({wo.workLogs.length})
+            Логи работ ({wo.workLogs.length}/{wo.items.filter((i) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true)).length})
           </button>
           <button
             onClick={() => setTab('activity')}
@@ -427,37 +426,10 @@ export default function WorkOrderDetailPage() {
         )}
 
         {tab === 'logs' && (
-          <div className="mt-4">
-            <div className="mb-3 flex justify-end">
-              <button
-                onClick={() => setShowAddLog(true)}
-                className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
-              >
-                Добавить лог
-              </button>
-            </div>
-
-            {wo.workLogs.length === 0 ? (
-              <div className="py-8 text-center text-sm text-gray-500">Нет записей</div>
-            ) : (
-              <div className="space-y-3">
-                {wo.workLogs.map((log) => (
-                  <div key={log.id} className="rounded-lg border border-gray-200 bg-white p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-900">
-                        {log.mechanic.firstName} {log.mechanic.lastName}
-                      </span>
-                      <span className="text-xs text-gray-500">{formatDate(log.logDate)}</span>
-                    </div>
-                    <p className="mt-1 text-sm text-gray-700">{log.description}</p>
-                    <span className="mt-1 inline-block rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                      {Number(log.hoursWorked)} ч.
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <WorkLogsTab
+            workOrder={wo}
+            onComplete={() => queryClient.invalidateQueries({ queryKey: ['work-order', id] })}
+          />
         )}
 
         {tab === 'activity' && (
@@ -518,16 +490,106 @@ export default function WorkOrderDetailPage() {
           }}
         />
       )}
-      {showAddLog && (
-        <AddWorkLogModal
-          workOrderId={id}
-          laborItems={wo.items.filter((i) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true))}
-          onClose={() => setShowAddLog(false)}
-          onSuccess={() => {
-            setShowAddLog(false);
-            queryClient.invalidateQueries({ queryKey: ['work-order', id] });
-          }}
-        />
+    </div>
+  );
+}
+
+function WorkLogsTab({
+  workOrder,
+  onComplete,
+}: {
+  workOrder: WorkOrderDetail;
+  onComplete: () => void;
+}) {
+  const [completing, setCompleting] = useState<string | null>(null);
+
+  const laborItems = workOrder.items.filter(
+    (i) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true),
+  );
+
+  // Deduplicate by description
+  const uniqueLabor = laborItems.filter(
+    (item, idx, arr) => arr.findIndex((i) => i.description === item.description) === idx,
+  );
+
+  // Check which descriptions have work logs
+  const completedDescriptions = new Set(
+    workOrder.workLogs.map((l) => l.description),
+  );
+
+  async function handleToggle(item: WorkOrderItem) {
+    if (completedDescriptions.has(item.description)) return;
+    setCompleting(item.id);
+    try {
+      await apiFetch(`/work-orders/${workOrder.id}/work-logs`, {
+        method: 'POST',
+        body: JSON.stringify({
+          description: item.description,
+          hoursWorked: item.normHours ? Number(item.normHours) : 1,
+        }),
+      });
+      onComplete();
+    } finally {
+      setCompleting(null);
+    }
+  }
+
+  return (
+    <div className="mt-4">
+      {uniqueLabor.length === 0 ? (
+        <div className="py-8 text-center text-sm text-gray-500">Нет согласованных работ</div>
+      ) : (
+        <div className="space-y-2">
+          {uniqueLabor.map((item) => {
+            const done = completedDescriptions.has(item.description);
+            const isLoading = completing === item.id;
+            return (
+              <div
+                key={item.id}
+                className={`flex items-center gap-3 rounded-lg border p-4 ${
+                  done ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-white'
+                }`}
+              >
+                <button
+                  onClick={() => handleToggle(item)}
+                  disabled={done || isLoading}
+                  className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
+                    done
+                      ? 'border-green-500 bg-green-500 text-white'
+                      : 'border-gray-300 hover:border-primary-500'
+                  } disabled:cursor-default`}
+                >
+                  {done && (
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {isLoading && (
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-primary-600" />
+                  )}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm font-medium ${done ? 'text-green-700 line-through' : 'text-gray-900'}`}>
+                    {item.description}
+                  </p>
+                  {item.normHours && (
+                    <span className="text-xs text-gray-500">{Number(item.normHours)} н/ч</span>
+                  )}
+                </div>
+                {done && (() => {
+                  const log = workOrder.workLogs.find((l) => l.description === item.description);
+                  if (!log) return null;
+                  return (
+                    <div className="text-right text-xs text-gray-500">
+                      <div>{log.mechanic.firstName} {log.mechanic.lastName}</div>
+                      <div>{formatDate(log.logDate)}</div>
+                    </div>
+                  );
+                })()}
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -769,126 +831,6 @@ function EditItemModal({
             </button>
             <button type="submit" disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
               {saving ? 'Сохранение...' : 'Сохранить'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function AddWorkLogModal({
-  workOrderId,
-  laborItems,
-  onClose,
-  onSuccess,
-}: {
-  workOrderId: string;
-  laborItems: WorkOrderItem[];
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
-  const [selectedItemId, setSelectedItemId] = useState('');
-  const [description, setDescription] = useState('');
-  const [hoursWorked, setHoursWorked] = useState('');
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  // Deduplicate by description
-  const uniqueItems = laborItems.filter((item, idx, arr) =>
-    arr.findIndex((i) => i.description === item.description) === idx,
-  );
-
-  function handleItemSelect(itemId: string) {
-    setSelectedItemId(itemId);
-    if (itemId) {
-      const item = laborItems.find((i) => i.id === itemId);
-      if (item) {
-        setDescription(item.description);
-        if (item.normHours && !hoursWorked) {
-          setHoursWorked(String(Number(item.normHours)));
-        }
-      }
-    }
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    if (!description || !hoursWorked) {
-      setError('Заполните описание и часы');
-      return;
-    }
-    setSaving(true);
-    try {
-      await apiFetch(`/work-orders/${workOrderId}/work-logs`, {
-        method: 'POST',
-        body: JSON.stringify({
-          description,
-          hoursWorked: Number(hoursWorked),
-        }),
-      });
-      onSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Ошибка');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-lg font-bold text-gray-900">Добавить лог работы</h2>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          {uniqueItems.length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Работа</label>
-              <select
-                value={selectedItemId}
-                onChange={(e) => handleItemSelect(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              >
-                <option value="">Выберите или введите вручную</option>
-                {uniqueItems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.description}{item.normHours ? ` (${Number(item.normHours)} н/ч)` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Описание *</label>
-            <textarea
-              value={description}
-              onChange={(e) => { setDescription(e.target.value); setSelectedItemId(''); }}
-              rows={3}
-              placeholder="Что было сделано..."
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Часы работы *</label>
-            <input
-              type="number"
-              value={hoursWorked}
-              onChange={(e) => setHoursWorked(e.target.value)}
-              min="0.1"
-              step="any"
-              placeholder="Например: 1.5"
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-              required
-            />
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-              Отмена
-            </button>
-            <button type="submit" disabled={saving} className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50">
-              {saving ? 'Сохранение...' : 'Добавить'}
             </button>
           </div>
         </form>
