@@ -213,9 +213,10 @@ export class WorkOrdersController {
   @ApiOperation({ summary: 'Создать заказ-наряд' })
   create(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Body() dto: CreateWorkOrderDto,
   ) {
-    return this.workOrdersService.create(tenantId, dto);
+    return this.workOrdersService.create(tenantId, dto, user.id);
   }
 
   @Post('from-appointment/:appointmentId')
@@ -223,9 +224,10 @@ export class WorkOrdersController {
   @ApiOperation({ summary: 'Создать заказ-наряд из записи' })
   createFromAppointment(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Param('appointmentId') appointmentId: string,
   ) {
-    return this.workOrdersService.createFromAppointment(tenantId, appointmentId);
+    return this.workOrdersService.createFromAppointment(tenantId, appointmentId, user.id);
   }
 
   @Patch(':id')
@@ -233,10 +235,11 @@ export class WorkOrdersController {
   @ApiOperation({ summary: 'Обновить заказ-наряд' })
   update(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Param('id') id: string,
     @Body() dto: UpdateWorkOrderDto,
   ) {
-    return this.workOrdersService.update(tenantId, id, dto);
+    return this.workOrdersService.update(tenantId, id, dto, user.id);
   }
 
   @Patch(':id/status')
@@ -244,10 +247,11 @@ export class WorkOrdersController {
   @ApiOperation({ summary: 'Изменить статус заказ-наряда' })
   updateStatus(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Param('id') id: string,
     @Body() dto: UpdateStatusDto,
   ) {
-    return this.workOrdersService.updateStatus(tenantId, id, dto.status);
+    return this.workOrdersService.updateStatus(tenantId, id, dto.status, user.id);
   }
 
   @Delete(':id')
@@ -264,10 +268,11 @@ export class WorkOrdersController {
   @ApiOperation({ summary: 'Добавить позицию' })
   addItem(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Param('id') id: string,
     @Body() dto: CreateItemDto,
   ) {
-    return this.workOrdersService.addItem(tenantId, id, dto);
+    return this.workOrdersService.addItem(tenantId, id, dto, user.id);
   }
 
   @Patch(':id/items/:itemId')
@@ -275,11 +280,12 @@ export class WorkOrdersController {
   @ApiOperation({ summary: 'Изменить позицию' })
   updateItem(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Param('id') id: string,
     @Param('itemId') itemId: string,
     @Body() dto: UpdateItemDto,
   ) {
-    return this.workOrdersService.updateItem(tenantId, id, itemId, dto);
+    return this.workOrdersService.updateItem(tenantId, id, itemId, dto, user.id);
   }
 
   @Delete(':id/items/:itemId')
@@ -287,10 +293,11 @@ export class WorkOrdersController {
   @ApiOperation({ summary: 'Удалить позицию' })
   deleteItem(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Param('id') id: string,
     @Param('itemId') itemId: string,
   ) {
-    return this.workOrdersService.deleteItem(tenantId, id, itemId);
+    return this.workOrdersService.deleteItem(tenantId, id, itemId, user.id);
   }
 
   // --- Item Mechanics ---

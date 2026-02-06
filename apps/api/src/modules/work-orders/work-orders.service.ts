@@ -16,6 +16,19 @@ function formatWONumber(seq: number): string {
   return `WO-${String(seq).padStart(5, '0')}`;
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  NEW: 'Новый',
+  DIAGNOSED: 'Диагностика',
+  APPROVED: 'Согласован',
+  IN_PROGRESS: 'В работе',
+  PAUSED: 'Пауза',
+  COMPLETED: 'Выполнен',
+  INVOICED: 'Счёт выставлен',
+  PAID: 'Оплачен',
+  CLOSED: 'Закрыт',
+  CANCELLED: 'Отменён',
+};
+
 const WORK_ORDER_TRANSITIONS: Record<string, string[]> = {
   NEW: ['DIAGNOSED', 'CANCELLED'],
   DIAGNOSED: ['APPROVED', 'CANCELLED'],
@@ -49,6 +62,12 @@ const workOrderInclude = {
       mechanic: { select: { id: true, firstName: true, lastName: true } },
     },
     orderBy: { logDate: 'desc' as const },
+  },
+  activities: {
+    include: {
+      user: { select: { id: true, firstName: true, lastName: true } },
+    },
+    orderBy: { createdAt: 'desc' as const },
   },
 };
 
@@ -173,8 +192,9 @@ export class WorkOrdersService {
       mileageAtIntake?: number;
       fuelLevel?: string;
     },
+    userId?: string,
   ): Promise<any> {
-    return this.prisma.$transaction(async (tx) => {
+    const workOrder = await this.prisma.$transaction(async (tx) => {
       // Get next order number for this tenant
       const lastOrder = await tx.workOrder.findFirst({
         where: { tenantId },
@@ -184,7 +204,7 @@ export class WorkOrdersService {
 
       const nextSeq = (lastOrder ? parseWONumber(lastOrder.orderNumber) : 0) + 1;
 
-      const workOrder = await tx.workOrder.create({
+      return tx.workOrder.create({
         data: {
           orderNumber: formatWONumber(nextSeq),
           status: 'NEW',
@@ -204,14 +224,16 @@ export class WorkOrdersService {
         },
         include: workOrderInclude,
       });
-
-      return workOrder;
     });
+
+    await this.logActivity(workOrder.id, 'CREATED', 'Заказ-наряд создан', userId);
+    return workOrder;
   }
 
   async createFromAppointment(
     tenantId: string,
     appointmentId: string,
+    userId?: string,
   ): Promise<any> {
     const appointment = await this.prisma.appointment.findFirst({
       where: { id: appointmentId, tenantId },
@@ -309,6 +331,10 @@ export class WorkOrdersService {
       });
     });
 
+    if (workOrder) {
+      await this.logActivity(workOrder.id, 'CREATED', 'Создан из записи', userId);
+    }
+
     return workOrder;
   }
 
@@ -323,19 +349,51 @@ export class WorkOrdersService {
       diagnosticNotes?: string;
       inspectionChecklist?: any;
     },
+    userId?: string,
   ): Promise<any> {
-    await this.findById(tenantId, id);
-    return this.prisma.workOrder.update({
+    const old = await this.findById(tenantId, id);
+    const result = await this.prisma.workOrder.update({
       where: { id },
       data,
       include: workOrderInclude,
     });
+
+    // Log field changes
+    if (data.mechanicId !== undefined && data.mechanicId !== old.mechanicId) {
+      const name = result.mechanic
+        ? `${result.mechanic.firstName} ${result.mechanic.lastName}`
+        : 'Не назначен';
+      await this.logActivity(id, 'UPDATED', `Механик: ${name}`, userId, {
+        field: 'mechanicId',
+        from: old.mechanicId,
+        to: data.mechanicId,
+      });
+    }
+    if (data.advisorId !== undefined && data.advisorId !== old.advisorId) {
+      const name = result.advisor
+        ? `${result.advisor.firstName} ${result.advisor.lastName}`
+        : 'Не назначен';
+      await this.logActivity(id, 'UPDATED', `Приёмщик: ${name}`, userId, {
+        field: 'advisorId',
+        from: old.advisorId,
+        to: data.advisorId,
+      });
+    }
+    if (data.diagnosticNotes !== undefined && data.diagnosticNotes !== old.diagnosticNotes) {
+      await this.logActivity(id, 'UPDATED', 'Обновлены заметки диагностики', userId);
+    }
+    if (data.inspectionChecklist !== undefined) {
+      await this.logActivity(id, 'UPDATED', 'Обновлён лист осмотра', userId);
+    }
+
+    return result;
   }
 
   async updateStatus(
     tenantId: string,
     id: string,
     newStatus: WorkOrderStatus,
+    userId?: string,
   ): Promise<any> {
     const workOrder = await this.findById(tenantId, id);
 
@@ -358,11 +416,21 @@ export class WorkOrdersService {
       );
     }
 
-    return this.prisma.workOrder.update({
+    const oldStatus = workOrder.status;
+    const result = await this.prisma.workOrder.update({
       where: { id },
       data: { status: newStatus },
       include: workOrderInclude,
     });
+
+    const fromLabel = STATUS_LABELS[oldStatus] || oldStatus;
+    const toLabel = STATUS_LABELS[newStatus] || newStatus;
+    await this.logActivity(id, 'STATUS_CHANGE', `Статус: ${fromLabel} → ${toLabel}`, userId, {
+      from: oldStatus,
+      to: newStatus,
+    });
+
+    return result;
   }
 
   async delete(tenantId: string, id: string): Promise<void> {
@@ -402,6 +470,7 @@ export class WorkOrdersService {
       recommended?: boolean;
       mechanicId?: string;
     },
+    userId?: string,
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
 
@@ -442,6 +511,9 @@ export class WorkOrdersService {
 
     await this.recalcTotals(workOrderId);
 
+    const typeLabel = data.type === 'LABOR' ? 'работа' : 'запчасть';
+    await this.logActivity(workOrderId, 'ITEM_ADDED', `Добавлена ${typeLabel}: ${data.description}`, userId);
+
     // Re-fetch with includes to return full data
     return this.prisma.workOrderItem.findUnique({
       where: { id: item.id },
@@ -466,6 +538,7 @@ export class WorkOrdersService {
       normHours?: number;
       approvedByClient?: boolean;
     },
+    userId?: string,
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
 
@@ -494,6 +567,22 @@ export class WorkOrdersService {
     });
 
     await this.recalcTotals(workOrderId);
+
+    // Log changes
+    if (data.approvedByClient === true) {
+      await this.logActivity(workOrderId, 'ITEM_UPDATED', `Одобрена позиция: ${existing.description}`, userId);
+    } else if (data.approvedByClient === false) {
+      await this.logActivity(workOrderId, 'ITEM_UPDATED', `Отклонена позиция: ${existing.description}`, userId);
+    } else {
+      const changes: string[] = [];
+      if (data.quantity !== undefined && data.quantity !== Number(existing.quantity)) changes.push('кол-во');
+      if (data.unitPrice !== undefined && data.unitPrice !== Number(existing.unitPrice)) changes.push('цена');
+      if (data.description !== undefined && data.description !== existing.description) changes.push('описание');
+      if (changes.length > 0) {
+        await this.logActivity(workOrderId, 'ITEM_UPDATED', `Изменена позиция: ${existing.description} (${changes.join(', ')})`, userId);
+      }
+    }
+
     return item;
   }
 
@@ -501,6 +590,7 @@ export class WorkOrdersService {
     tenantId: string,
     workOrderId: string,
     itemId: string,
+    userId?: string,
   ): Promise<void> {
     await this.findById(tenantId, workOrderId);
 
@@ -511,6 +601,9 @@ export class WorkOrdersService {
 
     await this.prisma.workOrderItem.delete({ where: { id: itemId } });
     await this.recalcTotals(workOrderId);
+
+    const typeLabel = existing.type === 'LABOR' ? 'работа' : 'запчасть';
+    await this.logActivity(workOrderId, 'ITEM_DELETED', `Удалена ${typeLabel}: ${existing.description}`, userId);
   }
 
   // --- Item Mechanics ---
@@ -667,7 +760,7 @@ export class WorkOrdersService {
   ): Promise<any> {
     await this.findById(tenantId, workOrderId);
 
-    return this.prisma.workLog.create({
+    const log = await this.prisma.workLog.create({
       data: {
         workOrderId,
         mechanicId,
@@ -677,6 +770,30 @@ export class WorkOrdersService {
       },
       include: {
         mechanic: { select: { id: true, firstName: true, lastName: true } },
+      },
+    });
+
+    await this.logActivity(workOrderId, 'WORK_LOG', `Лог работы: ${data.hoursWorked} ч.`, mechanicId);
+
+    return log;
+  }
+
+  // --- Activity logging ---
+
+  private async logActivity(
+    workOrderId: string,
+    type: string,
+    description: string,
+    userId?: string,
+    metadata?: Record<string, any>,
+  ): Promise<void> {
+    await this.prisma.workOrderActivity.create({
+      data: {
+        workOrderId,
+        type,
+        description,
+        userId: userId || null,
+        metadata: metadata || undefined,
       },
     });
   }

@@ -151,6 +151,7 @@ model User {
   workLogs               WorkLog[]
   workOrderItemMechanics WorkOrderItemMechanic[] @relation("ItemMechanics")
   followUps              FollowUp[]
+  activities             WorkOrderActivity[]
 
   @@unique([email, tenantId])
   @@unique([phone, tenantId])
@@ -318,6 +319,7 @@ model WorkOrder {
   recommendations Recommendation[]
   followUps       FollowUp[]
   transactions    Transaction[]
+  activities      WorkOrderActivity[]
 
   @@unique([orderNumber, tenantId])
   @@index([tenantId])
@@ -542,4 +544,22 @@ model Transaction {
   @@index([type])
   @@index([date])
   @@map("transactions")
+}
+
+model WorkOrderActivity {
+  id          String   @id @default(uuid())
+  type        String
+  description String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId])
+  @@index([createdAt])
+  @@map("work_order_activities")
 }

@@ -30,6 +30,15 @@ interface WorkLogEntry {
   mechanic: { id: string; firstName: string; lastName: string };
 }
 
+interface ActivityEntry {
+  id: string;
+  type: string;
+  description: string;
+  metadata: Record<string, any> | null;
+  createdAt: string;
+  user: { id: string; firstName: string; lastName: string } | null;
+}
+
 interface WorkOrderDetail {
   id: string;
   orderNumber: string;
@@ -50,6 +59,7 @@ interface WorkOrderDetail {
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null };
   items: WorkOrderItem[];
   workLogs: WorkLogEntry[];
+  activities: ActivityEntry[];
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -91,6 +101,16 @@ const TRANSITIONS: Record<string, string[]> = {
   CANCELLED: [],
 };
 
+const ACTIVITY_DOT_COLORS: Record<string, string> = {
+  CREATED: 'bg-green-500',
+  STATUS_CHANGE: 'bg-blue-500',
+  ITEM_ADDED: 'bg-indigo-500',
+  ITEM_UPDATED: 'bg-amber-500',
+  ITEM_DELETED: 'bg-red-500',
+  UPDATED: 'bg-gray-400',
+  WORK_LOG: 'bg-yellow-500',
+};
+
 function formatMoney(amount: number | string): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
   if (!num) return '0 ₽';
@@ -109,7 +129,7 @@ export default function WorkOrderDetailPage() {
   const queryClient = useQueryClient();
   const id = params.id as string;
 
-  const [tab, setTab] = useState<'items' | 'logs'>('items');
+  const [tab, setTab] = useState<'items' | 'logs' | 'activity'>('items');
   const [showAddItem, setShowAddItem] = useState(false);
   const [editItem, setEditItem] = useState<WorkOrderDetail['items'][0] | null>(null);
   const [showAddLog, setShowAddLog] = useState(false);
@@ -314,6 +334,12 @@ export default function WorkOrderDetailPage() {
           >
             Логи работ ({wo.workLogs.length})
           </button>
+          <button
+            onClick={() => setTab('activity')}
+            className={`px-4 py-2 text-sm font-medium ${tab === 'activity' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Хронология ({wo.activities.length})
+          </button>
         </div>
 
         {tab === 'items' && (
@@ -410,6 +436,41 @@ export default function WorkOrderDetailPage() {
                     </span>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'activity' && (
+          <div className="mt-4">
+            {wo.activities.length === 0 ? (
+              <div className="py-8 text-center text-sm text-gray-500">Нет записей</div>
+            ) : (
+              <div className="relative ml-4">
+                {/* Vertical line */}
+                <div className="absolute left-1.5 top-2 bottom-2 w-px bg-gray-200" />
+                <div className="space-y-4">
+                  {wo.activities.map((act) => {
+                    const dotColor = ACTIVITY_DOT_COLORS[act.type] || 'bg-gray-400';
+                    const time = new Date(act.createdAt).toLocaleString('ru-RU', {
+                      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                    });
+                    return (
+                      <div key={act.id} className="relative flex items-start gap-3 pl-5">
+                        <div className={`absolute left-0 top-1.5 h-3 w-3 rounded-full ${dotColor} ring-2 ring-white`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-900">{act.description}</p>
+                          <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
+                            <span>{time}</span>
+                            {act.user && (
+                              <span>{act.user.firstName} {act.user.lastName}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
