@@ -1601,9 +1601,21 @@ function WorkOrderDetailModal({
 
   async function handleNextStatus() {
     if (!next) return;
+    // Требуем механика для перехода в работу
+    if (!mechanicId && ['APPROVED', 'DIAGNOSED'].includes(wo?.status || '')) {
+      setError('Назначьте механика перед передачей в работу');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
+      // Сохраняем механика перед переходом статуса
+      if (mechanicId && wo && !wo.mechanic?.id) {
+        await apiFetch(`/work-orders/${workOrderId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ mechanicId }),
+        });
+      }
       await apiFetch(`/work-orders/${workOrderId}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: next.status }),
