@@ -1678,6 +1678,7 @@ function WorkOrderDetailModal({
           normHours,
           serviceId: svc.id,
           recommended: true,
+          mechanicId: mechanicId || undefined,
         }),
       });
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
@@ -1719,6 +1720,7 @@ function WorkOrderDetailModal({
           unitPrice: 2000,
           normHours,
           serviceId: svc.id,
+          mechanicId: mechanicId || undefined,
         }),
       });
       setSelectedServiceId('');
