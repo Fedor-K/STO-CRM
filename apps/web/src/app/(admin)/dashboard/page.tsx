@@ -1118,6 +1118,11 @@ function AppointmentDetailModal({
     setError('');
     try {
       if (column === 'appeal') {
+        // Save notes and advisor before changing status
+        await apiFetch(`/appointments/${appointmentId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ notes: notes || null, advisorId: advisorId || null }),
+        });
         await apiFetch(`/appointments/${appointmentId}/status`, {
           method: 'PATCH',
           body: JSON.stringify({ status: 'ESTIMATING' }),
