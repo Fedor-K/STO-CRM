@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 
 // --- Types ---
 
@@ -62,6 +63,7 @@ function formatDateTime(dateStr: string): string {
 // --- Main Page ---
 
 export default function AppointmentsPage() {
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
 
@@ -108,7 +110,7 @@ export default function AppointmentsPage() {
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {tableData.data.map((a) => (
-                  <tr key={a.id} className="hover:bg-gray-50">
+                  <tr key={a.id} className="cursor-pointer hover:bg-gray-50" onClick={() => router.push(`/appointments/${a.id}`)}>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">
                       {formatDateTime(a.createdAt)}
                     </td>
