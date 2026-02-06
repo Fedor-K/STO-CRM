@@ -2261,15 +2261,29 @@ function WorkOrderDetailModal({
               {next && (() => {
                 const MECHANIC_REQUIRED = ['NEW', 'DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED'];
                 const needsMechanic = MECHANIC_REQUIRED.includes(wo?.status || '') && !mechanicId;
+                const laborItems = (wo?.items || []).filter((i: any) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true));
+                const allLogsCompleted = (wo?.workLogs || []).length >= laborItems.length;
+                const needsLogs = wo?.status === 'IN_PROGRESS' && next.status === 'COMPLETED' && !allLogsCompleted;
                 return (
-                  <button
-                    onClick={handleNextStatus}
-                    disabled={saving || needsMechanic}
-                    title={needsMechanic ? 'Назначьте механика' : undefined}
-                    className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {saving ? '...' : next.label}
-                  </button>
+                  <>
+                    <button
+                      onClick={handleNextStatus}
+                      disabled={saving || needsMechanic || needsLogs}
+                      title={needsMechanic ? 'Назначьте механика' : needsLogs ? 'Отметьте все работы в Логах работ' : undefined}
+                      className="flex-1 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {saving ? '...' : next.label}
+                    </button>
+                    {needsLogs && (
+                      <p className="w-full text-xs text-amber-600 mt-1">
+                        Отметьте все работы в{' '}
+                        <a href={`/work-orders/${workOrderId}`} className="underline hover:text-amber-700">
+                          Логах работ
+                        </a>
+                        {' '}перед переводом в &laquo;Готов&raquo;
+                      </p>
+                    )}
+                  </>
                 );
               })()}
             </div>

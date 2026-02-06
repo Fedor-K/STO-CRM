@@ -436,6 +436,19 @@ export class WorkOrdersService {
       );
     }
 
+    // Требуем завершения всех логов работ перед переводом в COMPLETED
+    if (newStatus === 'COMPLETED') {
+      const laborItems = (workOrder.items || []).filter(
+        (i: any) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true),
+      );
+      const workLogsCount = (workOrder.workLogs || []).length;
+      if (workLogsCount < laborItems.length) {
+        throw new BadRequestException(
+          'Отметьте все работы как выполненные в Логах работ перед переводом в "Готов"',
+        );
+      }
+    }
+
     const oldStatus = workOrder.status;
     const result = await this.prisma.workOrder.update({
       where: { id },

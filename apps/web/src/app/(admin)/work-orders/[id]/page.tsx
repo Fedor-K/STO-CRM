@@ -167,6 +167,9 @@ export default function WorkOrderDetailPage() {
   if (!wo) return <div className="py-8 text-center text-gray-500">Заказ-наряд не найден</div>;
 
   const allowedTransitions = TRANSITIONS[wo.status] || [];
+  const laborItems = wo.items.filter((i) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true));
+  const allLogsCompleted = wo.workLogs.length >= laborItems.length;
+  const needsLogsForCompleted = wo.status === 'IN_PROGRESS' && !allLogsCompleted;
 
   return (
     <div>
@@ -183,17 +186,22 @@ export default function WorkOrderDetailPage() {
             {STATUS_LABELS[wo.status]}
           </span>
         </div>
-        <div className="flex gap-2">
-          {allowedTransitions.filter((s) => s !== 'CANCELLED').map((status) => (
-            <button
-              key={status}
-              onClick={() => statusMutation.mutate(status)}
-              disabled={statusMutation.isPending}
-              className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-            >
-              {STATUS_LABELS[status]}
-            </button>
-          ))}
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex gap-2">
+          {allowedTransitions.filter((s) => s !== 'CANCELLED').map((status) => {
+            const disabled = statusMutation.isPending || (status === 'COMPLETED' && needsLogsForCompleted);
+            return (
+              <button
+                key={status}
+                onClick={() => statusMutation.mutate(status)}
+                disabled={disabled}
+                title={status === 'COMPLETED' && needsLogsForCompleted ? 'Отметьте все работы в Логах работ' : undefined}
+                className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {STATUS_LABELS[status]}
+              </button>
+            );
+          })}
           {allowedTransitions.includes('CANCELLED') && (
             <button
               onClick={() => {
@@ -214,6 +222,15 @@ export default function WorkOrderDetailPage() {
             >
               Удалить
             </button>
+          )}
+          </div>
+          {needsLogsForCompleted && (
+            <p className="text-xs text-amber-600">
+              <button type="button" onClick={() => setTab('logs')} className="underline hover:text-amber-700">
+                Отметьте все работы как выполненные
+              </button>
+              {' '}перед переводом в &laquo;Готов&raquo;
+            </p>
           )}
         </div>
       </div>
