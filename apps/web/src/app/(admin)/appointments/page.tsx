@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 // --- Types ---
 
@@ -13,10 +14,12 @@ interface AppointmentRow {
   scheduledEnd: string;
   status: string;
   notes: string | null;
+  cancelReason: string | null;
   createdAt: string;
   client: { id: string; firstName: string; lastName: string; phone: string | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
+  workOrder: { id: string; orderNumber: string; status: string } | null;
 }
 
 interface PaginatedResponse {
@@ -105,6 +108,7 @@ export default function AppointmentsPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Автомобиль</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Статус</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Приёмщик</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">ЗН / Причина отмены</th>
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Заметки</th>
                 </tr>
               </thead>
@@ -138,6 +142,21 @@ export default function AppointmentsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {a.advisor ? `${a.advisor.firstName} ${a.advisor.lastName}` : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      {a.workOrder ? (
+                        <Link
+                          href={`/work-orders/${a.workOrder.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-primary-600 hover:text-primary-800 hover:underline font-medium"
+                        >
+                          {a.workOrder.orderNumber}
+                        </Link>
+                      ) : a.status === 'CANCELLED' ? (
+                        <span className="text-red-500">{a.cancelReason || 'Без причины'}</span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
                     </td>
                     <td className="max-w-[200px] truncate px-4 py-3 text-sm text-gray-500" title={a.notes || ''}>
                       {a.notes || '—'}

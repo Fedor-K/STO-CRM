@@ -7,6 +7,7 @@ const appointmentInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true, email: true } },
   advisor: { select: { id: true, firstName: true, lastName: true } },
   vehicle: { select: { id: true, make: true, model: true, licensePlate: true, year: true, mileage: true } },
+  workOrder: { select: { id: true, orderNumber: true, status: true } },
 };
 
 @Injectable()
