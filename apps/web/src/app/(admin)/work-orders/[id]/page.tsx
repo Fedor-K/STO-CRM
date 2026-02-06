@@ -521,6 +521,7 @@ export default function WorkOrderDetailPage() {
       {showAddLog && (
         <AddWorkLogModal
           workOrderId={id}
+          laborItems={wo.items.filter((i) => i.type === 'LABOR')}
           onClose={() => setShowAddLog(false)}
           onSuccess={() => {
             setShowAddLog(false);
@@ -778,17 +779,28 @@ function EditItemModal({
 
 function AddWorkLogModal({
   workOrderId,
+  laborItems,
   onClose,
   onSuccess,
 }: {
   workOrderId: string;
+  laborItems: WorkOrderItem[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const [selectedItemId, setSelectedItemId] = useState('');
   const [description, setDescription] = useState('');
   const [hoursWorked, setHoursWorked] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  function handleItemSelect(itemId: string) {
+    setSelectedItemId(itemId);
+    if (itemId) {
+      const item = laborItems.find((i) => i.id === itemId);
+      if (item) setDescription(item.description);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -819,11 +831,26 @@ function AddWorkLogModal({
       <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-gray-900">Добавить лог работы</h2>
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          {laborItems.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Работа</label>
+              <select
+                value={selectedItemId}
+                onChange={(e) => handleItemSelect(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+              >
+                <option value="">Выберите или введите вручную</option>
+                {laborItems.map((item) => (
+                  <option key={item.id} value={item.id}>{item.description}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700">Описание *</label>
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => { setDescription(e.target.value); setSelectedItemId(''); }}
               rows={3}
               placeholder="Что было сделано..."
               className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
