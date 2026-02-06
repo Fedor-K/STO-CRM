@@ -338,6 +338,13 @@ function ClientInfoModal({
     queryFn: () => apiFetch(`/users/${clientId}`),
   });
 
+  const { data: vehicles } = useQuery<{
+    data: { id: string; make: string; model: string; year: number | null; licensePlate: string | null; mileage: number | null }[];
+  }>({
+    queryKey: ['client-info-vehicles', clientId],
+    queryFn: () => apiFetch(`/vehicles?clientId=${clientId}&limit=50`),
+  });
+
   const { data: workOrders } = useQuery<{
     data: { id: string; orderNumber: string; status: string; totalAmount: string | number; createdAt: string;
       vehicle: { make: string; model: string; licensePlate: string | null } }[];
@@ -378,6 +385,27 @@ function ClientInfoModal({
             </div>
           )}
         </div>
+
+        <h3 className="mt-5 text-sm font-semibold uppercase text-gray-500">
+          Автомобили {vehicles?.data && `(${vehicles.data.length})`}
+        </h3>
+        {!vehicles ? (
+          <div className="mt-2 text-center text-sm text-gray-500">Загрузка...</div>
+        ) : vehicles.data.length === 0 ? (
+          <div className="mt-2 text-center text-sm text-gray-500">Нет автомобилей</div>
+        ) : (
+          <div className="mt-2 space-y-2">
+            {vehicles.data.map((v) => (
+              <div key={v.id} className="rounded-lg border border-gray-200 p-3">
+                <div className="text-sm font-medium text-gray-900">
+                  {v.make} {v.model} {v.year ? `(${v.year})` : ''}
+                </div>
+                {v.licensePlate && <div className="text-xs font-mono text-gray-500">{v.licensePlate}</div>}
+                {v.mileage != null && <div className="text-xs text-gray-400">{v.mileage.toLocaleString('ru-RU')} км</div>}
+              </div>
+            ))}
+          </div>
+        )}
 
         <h3 className="mt-5 text-sm font-semibold uppercase text-gray-500">
           История заказов {workOrders?.meta?.total != null && `(${workOrders.meta.total})`}
