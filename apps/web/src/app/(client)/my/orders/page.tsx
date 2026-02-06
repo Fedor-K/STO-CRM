@@ -11,7 +11,7 @@ interface WorkOrder {
   clientComplaints: string | null;
   totalAmount: string | number;
   createdAt: string;
-  vehicle: { id: string; make: string; model: string; licensePlate: string | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
   mechanic: { id: string; firstName: string; lastName: string } | null;
   _count: { items: number };
 }

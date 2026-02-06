@@ -16,7 +16,7 @@ interface WorkOrderCard {
   createdAt: string;
   client: { id: string; firstName: string; lastName: string; phone: string | null };
   mechanic: { id: string; firstName: string; lastName: string } | null;
-  vehicle: { id: string; make: string; model: string; licensePlate: string | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
   _count: { items: number };
 }
 

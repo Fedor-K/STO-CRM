@@ -58,7 +58,7 @@ interface WorkOrderDetail {
   client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   mechanic: { id: string; firstName: string; lastName: string } | null;
-  vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null };
+  vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null; mileage: number | null };
   items: WorkOrderItem[];
   workLogs: WorkLogEntry[];
   activities: ActivityEntry[];
