@@ -2168,12 +2168,13 @@ function WorkOrderDetailModal({
 
             {/* Items — collapsible with tabs */}
             {(() => {
-              const regularItems = wo.items.filter((i) => !i.recommended || i.approvedByClient === true);
-              const recommendedItems = wo.items.filter((i) => i.recommended && i.approvedByClient !== true);
+              const regularItems = wo.items.filter((i) => !i.recommended);
+              const recommendedItems = wo.items.filter((i) => i.recommended);
               const regularTotal = regularItems.reduce((sum, i) => sum + Number(i.totalPrice), 0);
               const regularLabor = regularItems.filter((i) => i.type === 'LABOR').reduce((sum, i) => sum + Number(i.totalPrice), 0);
               const regularParts = regularItems.filter((i) => i.type === 'PART').reduce((sum, i) => sum + Number(i.totalPrice), 0);
-              const grandTotal = regularTotal;
+              const approvedRecommendedTotal = recommendedItems.filter((i) => i.approvedByClient === true).reduce((sum, i) => sum + Number(i.totalPrice), 0);
+              const grandTotal = regularTotal + approvedRecommendedTotal;
               return (
                 <>
                   <ItemsSection
@@ -3095,8 +3096,9 @@ function RecommendedSection({
   const [expanded, setExpanded] = useState(true);
   const canApprove = ['DIAGNOSED', 'APPROVED'].includes(status);
 
+  const approvedCount = items.filter((i) => i.approvedByClient === true).length;
   const approvedTotal = items
-    .filter((i) => i.approvedByClient !== false)
+    .filter((i) => i.approvedByClient === true)
     .reduce((sum, i) => sum + Number(i.totalPrice), 0);
 
   return (
