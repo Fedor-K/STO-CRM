@@ -521,7 +521,7 @@ export default function WorkOrderDetailPage() {
       {showAddLog && (
         <AddWorkLogModal
           workOrderId={id}
-          laborItems={wo.items.filter((i) => i.type === 'LABOR')}
+          laborItems={wo.items.filter((i) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true))}
           onClose={() => setShowAddLog(false)}
           onSuccess={() => {
             setShowAddLog(false);
@@ -794,11 +794,21 @@ function AddWorkLogModal({
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Deduplicate by description
+  const uniqueItems = laborItems.filter((item, idx, arr) =>
+    arr.findIndex((i) => i.description === item.description) === idx,
+  );
+
   function handleItemSelect(itemId: string) {
     setSelectedItemId(itemId);
     if (itemId) {
       const item = laborItems.find((i) => i.id === itemId);
-      if (item) setDescription(item.description);
+      if (item) {
+        setDescription(item.description);
+        if (item.normHours && !hoursWorked) {
+          setHoursWorked(String(Number(item.normHours)));
+        }
+      }
     }
   }
 
@@ -831,7 +841,7 @@ function AddWorkLogModal({
       <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-gray-900">Добавить лог работы</h2>
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          {laborItems.length > 0 && (
+          {uniqueItems.length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-700">Работа</label>
               <select
@@ -840,8 +850,10 @@ function AddWorkLogModal({
                 className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
               >
                 <option value="">Выберите или введите вручную</option>
-                {laborItems.map((item) => (
-                  <option key={item.id} value={item.id}>{item.description}</option>
+                {uniqueItems.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.description}{item.normHours ? ` (${Number(item.normHours)} н/ч)` : ''}
+                  </option>
                 ))}
               </select>
             </div>
