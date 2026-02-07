@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { InventoryService } from '../inventory/inventory.service';
 import { paginate, type PaginatedResponse } from '../../common/dto/pagination.dto';
 import { WorkOrderStatus } from '@prisma/client';
 
@@ -80,7 +81,10 @@ const workOrderListInclude = {
 
 @Injectable()
 export class WorkOrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inventoryService: InventoryService,
+  ) {}
 
   async findAll(
     tenantId: string,
@@ -345,6 +349,15 @@ export class WorkOrdersService {
 
     if (workOrder) {
       await this.logActivity(workOrder.id, 'CREATED', 'Создан из записи', userId);
+      // Reserve stock for PART items
+      for (const item of (workOrder.items || [])) {
+        if (item.type === 'PART' && item.partId) {
+          await this.reservePartStock(
+            tenantId, workOrder.orderNumber, item.id, item.partId,
+            Number(item.quantity), userId,
+          );
+        }
+      }
       return this.findById(tenantId, workOrder.id);
     }
 
@@ -468,6 +481,23 @@ export class WorkOrdersService {
       include: workOrderInclude,
     });
 
+    // Inventory: consume stock on COMPLETED, unreserve on CANCELLED
+    if (newStatus === 'COMPLETED') {
+      for (const item of (workOrder.items || [])) {
+        if (item.type === 'PART' && item.partId) {
+          if (!item.recommended || item.approvedByClient === true) {
+            await this.consumePartStock(tenantId, workOrder.orderNumber, item.id, item.partId, userId);
+          }
+        }
+      }
+    } else if (newStatus === 'CANCELLED') {
+      for (const item of (workOrder.items || [])) {
+        if (item.type === 'PART' && item.partId) {
+          await this.unreservePartStock(tenantId, workOrder.orderNumber, item.id, item.partId, userId);
+        }
+      }
+    }
+
     const fromLabel = STATUS_LABELS[oldStatus] || oldStatus;
     const toLabel = STATUS_LABELS[newStatus] || newStatus;
     await this.logActivity(id, 'STATUS_CHANGE', `Статус: ${fromLabel} → ${toLabel}`, userId, {
@@ -554,6 +584,17 @@ export class WorkOrdersService {
       });
     }
 
+    // Reserve stock for non-recommended PART items
+    if (data.type === 'PART' && data.partId && !data.recommended) {
+      const wo = await this.prisma.workOrder.findUnique({
+        where: { id: workOrderId },
+        select: { orderNumber: true },
+      });
+      if (wo) {
+        await this.reservePartStock(tenantId, wo.orderNumber, item.id, data.partId, data.quantity, userId);
+      }
+    }
+
     await this.recalcTotals(workOrderId);
 
     const typeLabel = data.type === 'LABOR' ? 'работа' : 'запчасть';
@@ -627,6 +668,25 @@ export class WorkOrdersService {
       }
     }
 
+    // Adjust stock reservation for PART items
+    if (existing.type === 'PART' && existing.partId) {
+      if (data.approvedByClient === true && existing.recommended && existing.approvedByClient !== true) {
+        // Recommended part approved → reserve stock
+        const qty = data.quantity ?? Number(existing.quantity);
+        await this.reservePartStock(tenantId, wo.orderNumber, itemId, existing.partId, qty, userId);
+      } else if (data.approvedByClient === false && existing.recommended) {
+        // Recommended part rejected → unreserve stock
+        await this.unreservePartStock(tenantId, wo.orderNumber, itemId, existing.partId, userId);
+      } else if (data.quantity !== undefined && data.quantity !== Number(existing.quantity)) {
+        // Quantity changed on active item → re-reserve
+        const isActive = !existing.recommended || existing.approvedByClient === true;
+        if (isActive) {
+          await this.unreservePartStock(tenantId, wo.orderNumber, itemId, existing.partId, userId);
+          await this.reservePartStock(tenantId, wo.orderNumber, itemId, existing.partId, data.quantity, userId);
+        }
+      }
+    }
+
     await this.recalcTotals(workOrderId);
 
     // Log changes
@@ -653,12 +713,17 @@ export class WorkOrdersService {
     itemId: string,
     userId?: string,
   ): Promise<void> {
-    await this.findById(tenantId, workOrderId);
+    const workOrder = await this.findById(tenantId, workOrderId);
 
     const existing = await this.prisma.workOrderItem.findFirst({
       where: { id: itemId, workOrderId },
     });
     if (!existing) throw new NotFoundException('Позиция не найдена');
+
+    // Unreserve stock for PART items
+    if (existing.type === 'PART' && existing.partId) {
+      await this.unreservePartStock(tenantId, workOrder.orderNumber, itemId, existing.partId, userId);
+    }
 
     await this.prisma.workOrderItem.delete({ where: { id: itemId } });
     await this.recalcTotals(workOrderId);
@@ -857,6 +922,111 @@ export class WorkOrdersService {
         metadata: metadata || undefined,
       },
     });
+  }
+
+  // --- Inventory integration ---
+
+  private async reservePartStock(
+    tenantId: string,
+    orderNumber: string,
+    itemId: string,
+    partId: string,
+    quantity: number,
+    userId?: string,
+  ): Promise<void> {
+    const warehouseStocks = await this.prisma.warehouseStock.findMany({
+      where: { partId },
+      include: { warehouse: { select: { id: true, tenantId: true } } },
+      orderBy: { quantity: 'desc' },
+    });
+
+    let remaining = quantity;
+    for (const ws of warehouseStocks) {
+      if (remaining <= 0) break;
+      if (ws.warehouse.tenantId !== tenantId) continue;
+      const available = ws.quantity - ws.reserved;
+      if (available <= 0) continue;
+      const toReserve = Math.min(remaining, available);
+      await this.inventoryService.addMovement(tenantId, {
+        partId,
+        warehouseId: ws.warehouseId,
+        type: 'RESERVED',
+        quantity: toReserve,
+        reference: `WO:${orderNumber}`,
+        referenceId: itemId,
+        userId,
+      });
+      remaining -= toReserve;
+    }
+  }
+
+  private async unreservePartStock(
+    tenantId: string,
+    orderNumber: string,
+    itemId: string,
+    partId: string,
+    userId?: string,
+  ): Promise<void> {
+    const reservations = await this.getItemReservations(itemId);
+    for (const [warehouseId, qty] of reservations) {
+      await this.inventoryService.addMovement(tenantId, {
+        partId,
+        warehouseId,
+        type: 'UNRESERVED',
+        quantity: qty,
+        reference: `WO:${orderNumber}`,
+        referenceId: itemId,
+        userId,
+      });
+    }
+  }
+
+  private async consumePartStock(
+    tenantId: string,
+    orderNumber: string,
+    itemId: string,
+    partId: string,
+    userId?: string,
+  ): Promise<void> {
+    const reservations = await this.getItemReservations(itemId);
+    for (const [warehouseId, qty] of reservations) {
+      await this.inventoryService.addMovement(tenantId, {
+        partId,
+        warehouseId,
+        type: 'CONSUMPTION',
+        quantity: qty,
+        reference: `WO:${orderNumber}`,
+        referenceId: itemId,
+        userId,
+      });
+    }
+  }
+
+  private async getItemReservations(itemId: string): Promise<Map<string, number>> {
+    const movements = await this.prisma.stockMovement.findMany({
+      where: {
+        referenceId: itemId,
+        type: { in: ['RESERVED', 'UNRESERVED', 'CONSUMPTION'] },
+      },
+      select: { warehouseId: true, type: true, quantity: true },
+    });
+
+    const result = new Map<string, number>();
+    for (const m of movements) {
+      if (!m.warehouseId) continue;
+      const current = result.get(m.warehouseId) || 0;
+      if (m.type === 'RESERVED') {
+        result.set(m.warehouseId, current + m.quantity);
+      } else {
+        result.set(m.warehouseId, current - m.quantity);
+      }
+    }
+
+    for (const [key, val] of result) {
+      if (val <= 0) result.delete(key);
+    }
+
+    return result;
   }
 
   // --- Private helpers ---
