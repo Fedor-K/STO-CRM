@@ -27,11 +27,16 @@ export class UsersService {
 
   async findAll(
     tenantId: string,
-    params: { page: number; limit: number; sort: string; order: 'asc' | 'desc'; role?: UserRole; search?: string },
+    params: { page: number; limit: number; sort: string; order: 'asc' | 'desc'; role?: UserRole; excludeRole?: UserRole; search?: string },
   ): Promise<PaginatedResponse<UserWithoutPassword>> {
-    const { page, limit, sort, order, role, search } = params;
+    const { page, limit, sort, order, role, excludeRole, search } = params;
     const skip = (page - 1) * limit;
-    const where: any = { tenantId, ...(role ? { role } : {}) };
+    const where: any = { tenantId };
+    if (role) {
+      where.role = role;
+    } else if (excludeRole) {
+      where.role = { not: excludeRole };
+    }
     if (search) {
       const words = search.trim().split(/\s+/);
       const nameFields = ['firstName', 'lastName', 'middleName'];

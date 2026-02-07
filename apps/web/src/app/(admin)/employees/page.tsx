@@ -47,7 +47,7 @@ export default function EmployeesPage() {
     queryKey: ['employees', page, roleFilter, search],
     queryFn: () =>
       apiFetch(
-        `/users?page=${page}&limit=20&sort=lastName&order=asc${roleFilter ? `&role=${roleFilter}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`,
+        `/users?page=${page}&limit=20&sort=lastName&order=asc${roleFilter ? `&role=${roleFilter}` : '&excludeRole=CLIENT'}${search ? `&search=${encodeURIComponent(search)}` : ''}`,
       ),
   });
 
