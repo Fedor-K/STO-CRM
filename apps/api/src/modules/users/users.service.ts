@@ -33,13 +33,20 @@ export class UsersService {
     const skip = (page - 1) * limit;
     const where: any = { tenantId, ...(role ? { role } : {}) };
     if (search) {
-      where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { middleName: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-      ];
+      const words = search.trim().split(/\s+/);
+      const nameFields = ['firstName', 'lastName', 'middleName'];
+      if (words.length > 1) {
+        // "Олег Уваров" → каждое слово должно быть в каком-то из ФИО-полей
+        where.AND = words.map(word => ({
+          OR: nameFields.map(f => ({ [f]: { contains: word, mode: 'insensitive' } })),
+        }));
+      } else {
+        where.OR = [
+          ...nameFields.map(f => ({ [f]: { contains: search, mode: 'insensitive' } })),
+          { phone: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ];
+      }
     }
 
     const [data, total] = await Promise.all([
