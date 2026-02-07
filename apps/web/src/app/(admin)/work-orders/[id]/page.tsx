@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { useParams, useRouter } from 'next/navigation';
@@ -11,6 +11,12 @@ import {
   createEmptyChecklist,
   type InspectionChecklist,
 } from '@sto-crm/shared';
+
+interface ItemMechanicEntry {
+  id: string;
+  contributionPercent: number;
+  mechanic: { id: string; firstName: string; lastName: string };
+}
 
 interface WorkOrderItem {
   id: string;
@@ -24,6 +30,7 @@ interface WorkOrderItem {
   vatAmount: string | number | null;
   recommended: boolean;
   approvedByClient: boolean | null;
+  mechanics: ItemMechanicEntry[];
 }
 
 interface WorkLogEntry {
@@ -165,6 +172,30 @@ export default function WorkOrderDetailPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['work-order', id] }),
   });
 
+  const addMechanicMutation = useMutation({
+    mutationFn: ({ itemId, mechanicId }: { itemId: string; mechanicId: string }) =>
+      apiFetch(`/work-orders/${id}/items/${itemId}/mechanics`, {
+        method: 'POST',
+        body: JSON.stringify({ mechanicId }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['work-order', id] }),
+  });
+
+  const updateMechanicMutation = useMutation({
+    mutationFn: ({ itemId, entryId, contributionPercent }: { itemId: string; entryId: string; contributionPercent: number }) =>
+      apiFetch(`/work-orders/${id}/items/${itemId}/mechanics/${entryId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ contributionPercent }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['work-order', id] }),
+  });
+
+  const removeMechanicMutation = useMutation({
+    mutationFn: ({ itemId, entryId }: { itemId: string; entryId: string }) =>
+      apiFetch(`/work-orders/${id}/items/${itemId}/mechanics/${entryId}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['work-order', id] }),
+  });
+
   if (isLoading) return <div className="py-8 text-center text-gray-500">Загрузка...</div>;
   if (!wo) return <div className="py-8 text-center text-gray-500">Заказ-наряд не найден</div>;
 
@@ -275,13 +306,6 @@ export default function WorkOrderDetailPage() {
         <div className="rounded-lg border border-gray-200 bg-white p-4">
           <h3 className="text-sm font-semibold uppercase text-gray-500">Информация</h3>
           <div className="mt-2 space-y-2 text-sm">
-            <AssignField
-              label="Механик"
-              currentValue={wo.mechanic ? `${wo.mechanic.firstName} ${wo.mechanic.lastName}` : null}
-              fetchUrl="/users?limit=100&sort=firstName&order=asc&role=MECHANIC"
-              onAssign={(userId) => updateFieldMutation.mutate({ mechanicId: userId || null })}
-              disabled={isLocked}
-            />
             <AssignField
               label="Приёмщик"
               currentValue={wo.advisor ? `${wo.advisor.firstName} ${wo.advisor.lastName}` : null}
@@ -400,6 +424,7 @@ export default function WorkOrderDetailPage() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Описание</th>
+                      {filterType === 'LABOR' && <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Исполнитель</th>}
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Кол-во</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Цена</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Сумма</th>
@@ -428,6 +453,18 @@ export default function WorkOrderDetailPage() {
                             </span>
                           )}
                         </td>
+                        {filterType === 'LABOR' && (
+                          <td className="px-4 py-3 text-sm text-gray-700">
+                            <ItemMechanicsCell
+                              workOrderId={id}
+                              item={item}
+                              isLocked={isLocked}
+                              onAdd={(mechanicId) => addMechanicMutation.mutate({ itemId: item.id, mechanicId })}
+                              onUpdatePercent={(entryId, pct) => updateMechanicMutation.mutate({ itemId: item.id, entryId, contributionPercent: pct })}
+                              onRemove={(entryId) => removeMechanicMutation.mutate({ itemId: item.id, entryId })}
+                            />
+                          </td>
+                        )}
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{Number(item.quantity)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{formatMoney(item.unitPrice)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">{formatMoney(item.totalPrice)}</td>
@@ -530,6 +567,189 @@ export default function WorkOrderDetailPage() {
             queryClient.invalidateQueries({ queryKey: ['work-order', id] });
           }}
         />
+      )}
+    </div>
+  );
+}
+
+function ItemMechanicsCell({
+  workOrderId,
+  item,
+  isLocked,
+  onAdd,
+  onUpdatePercent,
+  onRemove,
+}: {
+  workOrderId: string;
+  item: WorkOrderItem;
+  isLocked: boolean;
+  onAdd: (mechanicId: string) => void;
+  onUpdatePercent: (entryId: string, pct: number) => void;
+  onRemove: (entryId: string) => void;
+}) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<string | null>(null);
+  const [editPct, setEditPct] = useState('');
+  const [search, setSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const editRef = useRef<HTMLDivElement>(null);
+
+  const { data: mechanicsData } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
+    queryKey: ['mechanics-list'],
+    queryFn: () => apiFetch('/users?limit=100&sort=firstName&order=asc&role=MECHANIC'),
+    enabled: showAdd,
+  });
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowAdd(false);
+        setSearch('');
+      }
+      if (editRef.current && !editRef.current.contains(e.target as Node)) {
+        setEditingEntry(null);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const existingMechanicIds = new Set(item.mechanics.map((m) => m.mechanic.id));
+  const availableMechanics = (mechanicsData?.data || []).filter(
+    (m) => !existingMechanicIds.has(m.id) && (
+      !search || `${m.firstName} ${m.lastName}`.toLowerCase().includes(search.toLowerCase())
+    ),
+  );
+
+  const hasMechanics = item.mechanics.length > 0;
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {hasMechanics ? (
+        item.mechanics.map((entry) => (
+          <span key={entry.id} className="relative inline-flex items-center">
+            {!isLocked ? (
+              <button
+                onClick={() => {
+                  if (editingEntry === entry.id) {
+                    setEditingEntry(null);
+                  } else {
+                    setEditingEntry(entry.id);
+                    setEditPct(String(entry.contributionPercent));
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
+              >
+                {entry.mechanic.lastName} {entry.mechanic.firstName.charAt(0)}.
+                {item.mechanics.length > 1 && (
+                  <span className="text-blue-500">({entry.contributionPercent}%)</span>
+                )}
+              </button>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                {entry.mechanic.lastName} {entry.mechanic.firstName.charAt(0)}.
+                {item.mechanics.length > 1 && (
+                  <span className="text-blue-500">({entry.contributionPercent}%)</span>
+                )}
+              </span>
+            )}
+            {editingEntry === entry.id && !isLocked && (
+              <div ref={editRef} className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white p-2 shadow-lg">
+                <label className="block text-xs text-gray-500 mb-1">Процент участия</label>
+                <div className="flex gap-1">
+                  <input
+                    type="number"
+                    value={editPct}
+                    onChange={(e) => setEditPct(e.target.value)}
+                    min="1"
+                    max="100"
+                    className="w-16 rounded border border-gray-300 px-2 py-1 text-xs focus:border-primary-500 focus:outline-none"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const val = parseInt(editPct, 10);
+                        if (val >= 1 && val <= 100) {
+                          onUpdatePercent(entry.id, val);
+                          setEditingEntry(null);
+                        }
+                      }
+                      if (e.key === 'Escape') setEditingEntry(null);
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const val = parseInt(editPct, 10);
+                      if (val >= 1 && val <= 100) {
+                        onUpdatePercent(entry.id, val);
+                        setEditingEntry(null);
+                      }
+                    }}
+                    className="rounded bg-primary-600 px-2 py-1 text-xs text-white hover:bg-primary-700"
+                  >
+                    OK
+                  </button>
+                </div>
+                <button
+                  onClick={() => {
+                    onRemove(entry.id);
+                    setEditingEntry(null);
+                  }}
+                  className="mt-1.5 w-full rounded border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                >
+                  Убрать исполнителя
+                </button>
+              </div>
+            )}
+          </span>
+        ))
+      ) : (
+        <span className="text-gray-400">—</span>
+      )}
+      {!isLocked && (
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setShowAdd(!showAdd)}
+            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gray-100 text-gray-500 hover:bg-primary-100 hover:text-primary-600 text-xs"
+            title="Добавить исполнителя"
+          >
+            +
+          </button>
+          {showAdd && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-gray-200 bg-white shadow-lg">
+              <div className="p-2">
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Поиск..."
+                  className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-primary-500 focus:outline-none"
+                  autoFocus
+                />
+              </div>
+              <div className="max-h-40 overflow-y-auto">
+                {availableMechanics.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-gray-500">
+                    {mechanicsData ? 'Нет доступных' : 'Загрузка...'}
+                  </div>
+                ) : (
+                  availableMechanics.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => {
+                        onAdd(m.id);
+                        setShowAdd(false);
+                        setSearch('');
+                      }}
+                      className="block w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-primary-50 hover:text-primary-700"
+                    >
+                      {m.lastName} {m.firstName}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
