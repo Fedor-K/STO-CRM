@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 
@@ -37,6 +37,7 @@ export default function VehiclesPage() {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<PaginatedResponse>({
     queryKey: ['vehicles', page, search],
@@ -96,49 +97,95 @@ export default function VehiclesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {data.data.map((v) => (
-                  <tr key={v.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-gray-900">
-                        {v.make} {v.model}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        {[v.year, v.color].filter(Boolean).join(', ')}
-                      </div>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-900">
-                      {v.licensePlate || '—'}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-xs font-mono text-gray-500">
-                      {v.vin || '—'}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                      {v.mileage ? `${v.mileage.toLocaleString('ru-RU')} км` : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm text-gray-900">
-                        {v.client.firstName} {v.client.lastName}
-                      </div>
-                      {v.client.phone && (
-                        <div className="text-xs text-gray-500">{v.client.phone}</div>
+                {data.data.map((v) => {
+                  const isExpanded = expandedId === v.id;
+                  return (
+                    <Fragment key={v.id}>
+                      <tr
+                        onClick={() => setExpandedId(isExpanded ? null : v.id)}
+                        className="cursor-pointer hover:bg-gray-50"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="text-sm font-medium text-gray-900">
+                            {v.make} {v.model}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {[v.year, v.color].filter(Boolean).join(', ')}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-900">
+                          {v.licensePlate || '—'}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-xs font-mono text-gray-500">
+                          {v.vin || '—'}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                          {v.mileage ? `${v.mileage.toLocaleString('ru-RU')} км` : '—'}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="text-sm text-gray-900">
+                            {v.client.firstName} {v.client.lastName}
+                          </div>
+                          {v.client.phone && (
+                            <div className="text-xs text-gray-500">{v.client.phone}</div>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setEditingVehicle(v); setShowModal(true); }}
+                            className="text-primary-600 hover:text-primary-800"
+                          >
+                            Изменить
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDelete(v); }}
+                            className="ml-3 text-red-600 hover:text-red-800"
+                          >
+                            Удалить
+                          </button>
+                          <svg
+                            className={`ml-2 inline h-4 w-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={6} className="bg-gray-50 px-6 py-4">
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              {/* Vehicle details */}
+                              <div className="rounded-lg border border-gray-100 bg-white p-4">
+                                <h4 className="text-xs font-semibold uppercase text-gray-500">Автомобиль</h4>
+                                <div className="mt-2 space-y-1 text-sm">
+                                  <div className="font-medium text-gray-900">{v.make} {v.model}{v.year ? ` (${v.year})` : ''}</div>
+                                  {v.licensePlate && <div className="text-gray-600">Госномер: <span className="font-medium font-mono">{v.licensePlate}</span></div>}
+                                  {v.vin && <div className="text-gray-600">VIN: <span className="font-mono text-xs">{v.vin}</span></div>}
+                                  {v.color && <div className="text-gray-600">Цвет: {v.color}</div>}
+                                  {v.mileage != null && <div className="text-gray-600">Пробег: {v.mileage.toLocaleString('ru-RU')} км</div>}
+                                </div>
+                              </div>
+                              {/* Owner details */}
+                              <div className="rounded-lg border border-gray-100 bg-white p-4">
+                                <h4 className="text-xs font-semibold uppercase text-gray-500">Владелец</h4>
+                                <div className="mt-2 space-y-1 text-sm">
+                                  <div className="font-medium text-gray-900">{v.client.lastName} {v.client.firstName}</div>
+                                  {v.client.phone ? (
+                                    <div className="text-gray-600">Тел: {v.client.phone}</div>
+                                  ) : (
+                                    <div className="text-gray-400">Нет телефона</div>
+                                  )}
+                                  <div className="text-gray-500 text-xs">{v.client.email}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
-                      <button
-                        onClick={() => { setEditingVehicle(v); setShowModal(true); }}
-                        className="text-primary-600 hover:text-primary-800"
-                      >
-                        Изменить
-                      </button>
-                      <button
-                        onClick={() => handleDelete(v)}
-                        className="ml-3 text-red-600 hover:text-red-800"
-                      >
-                        Удалить
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
