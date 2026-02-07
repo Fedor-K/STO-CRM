@@ -283,7 +283,7 @@ export default function WorkOrderDetailPage() {
           <div className="mt-2 text-sm">
             <div className="font-medium text-gray-900">{wo.client.firstName} {wo.client.lastName}</div>
             {wo.client.phone && <div className="text-gray-500">{wo.client.phone}</div>}
-            {wo.client.email && <div className="text-gray-500">{wo.client.email}</div>}
+            {wo.client.phone ? <div className="text-gray-500">{wo.client.phone}</div> : wo.client.email && <div className="text-gray-500">{wo.client.email}</div>}
           </div>
           <h3 className="mt-4 text-sm font-semibold uppercase text-gray-500">Автомобиль</h3>
           <div className="mt-2 text-sm">
