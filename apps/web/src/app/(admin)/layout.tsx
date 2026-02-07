@@ -16,7 +16,7 @@ const navigation = [
   { name: 'Услуги', href: '/services' },
   { name: 'Склад', href: '/inventory' },
   { name: 'Финансы', href: '/finance' },
-  { name: 'Пользователи', href: '/users' },
+  { name: 'Сотрудники', href: '/employees' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
