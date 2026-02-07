@@ -1041,18 +1041,6 @@ function AppointmentDetailModal({
     },
   });
 
-  const { data: services } = useQuery<{ data: { id: string; name: string; price: string | number; normHours: string | number | null }[] }>({
-    queryKey: ['services-catalog'],
-    queryFn: () => apiFetch('/services?limit=200&sort=name&order=asc'),
-    enabled: column === 'estimating',
-  });
-
-  const { data: parts } = useQuery<{ data: { id: string; name: string; sellPrice: string | number; brand: string | null }[] }>({
-    queryKey: ['parts-catalog'],
-    queryFn: () => apiFetch('/parts?limit=200&sort=name&order=asc'),
-    enabled: column === 'estimating',
-  });
-
   const [notes, setNotes] = useState('');
   const [advisorId, setAdvisorId] = useState('');
   const [initialized, setInitialized] = useState(false);
@@ -1064,8 +1052,8 @@ function AppointmentDetailModal({
   const [plannedItems, setPlannedItems] = useState<PlannedItem[]>([]);
   const [showAddPlanned, setShowAddPlanned] = useState(false);
   const [plannedTab, setPlannedTab] = useState<'LABOR' | 'PART'>('LABOR');
-  const [selectedServiceId, setSelectedServiceId] = useState('');
-  const [selectedPartId, setSelectedPartId] = useState('');
+  const [selectedService, setSelectedService] = useState<{ id: string; name: string; price: string | number; normHours: string | number | null } | null>(null);
+  const [selectedPart, setSelectedPart] = useState<{ id: string; name: string; sellPrice: string | number; brand: string | null } | null>(null);
   const [partQty, setPartQty] = useState('1');
 
   if (appointment && !initialized) {
@@ -1120,32 +1108,30 @@ function AppointmentDetailModal({
   }
 
   function handleAddPlannedLabor() {
-    const svc = services?.data?.find((s) => s.id === selectedServiceId);
-    if (!svc) return;
-    const normHours = svc.normHours ? Number(svc.normHours) : 1;
+    if (!selectedService) return;
+    const normHours = selectedService.normHours ? Number(selectedService.normHours) : 1;
     setPlannedItems([...plannedItems, {
       type: 'LABOR',
-      description: svc.name,
+      description: selectedService.name,
       quantity: normHours,
       unitPrice: 2000,
       normHours,
-      serviceId: svc.id,
+      serviceId: selectedService.id,
     }]);
-    setSelectedServiceId('');
+    setSelectedService(null);
     setShowAddPlanned(false);
   }
 
   function handleAddPlannedPart() {
-    const part = parts?.data?.find((p) => p.id === selectedPartId);
-    if (!part) return;
+    if (!selectedPart) return;
     setPlannedItems([...plannedItems, {
       type: 'PART',
-      description: part.name,
+      description: selectedPart.name,
       quantity: Number(partQty) || 1,
-      unitPrice: Number(part.sellPrice),
-      partId: part.id,
+      unitPrice: Number(selectedPart.sellPrice),
+      partId: selectedPart.id,
     }]);
-    setSelectedPartId('');
+    setSelectedPart(null);
     setPartQty('1');
     setShowAddPlanned(false);
   }
@@ -1391,21 +1377,16 @@ function AppointmentDetailModal({
                         <div className="mt-2">
                           {showAddPlanned && plannedTab === 'LABOR' ? (
                             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
-                              <select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} className={inputCls}>
-                                <option value="">Выберите работу из каталога</option>
-                                {services?.data?.map((s) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.name} — {s.normHours ? `${Number(s.normHours)} н/ч` : '—'}
-                                  </option>
-                                ))}
-                              </select>
-                              {selectedServiceId && (() => {
-                                const svc = services?.data?.find((s) => s.id === selectedServiceId);
-                                if (!svc) return null;
-                                const norm = svc.normHours ? Number(svc.normHours) : 1;
+                              <SearchableServiceSelect
+                                inputClassName={inputCls}
+                                onSelect={(svc) => setSelectedService(svc)}
+                              />
+                              {selectedService && (() => {
+                                const norm = selectedService.normHours ? Number(selectedService.normHours) : 1;
                                 const total = 2000 * norm;
                                 return (
                                   <div className="rounded bg-white px-3 py-2 text-xs text-gray-600 space-y-0.5">
+                                    <div className="flex justify-between"><span>{selectedService.name}</span></div>
                                     <div className="flex justify-between"><span>Цена н/ч:</span><span className="font-medium">2 000 ₽</span></div>
                                     <div className="flex justify-between"><span>Норма:</span><span className="font-medium">{norm}</span></div>
                                     <div className="flex justify-between"><span>Всего:</span><span className="font-semibold text-gray-900">{formatMoney(total)}</span></div>
@@ -1413,8 +1394,8 @@ function AppointmentDetailModal({
                                 );
                               })()}
                               <div className="flex gap-2">
-                                <button type="button" onClick={() => { setShowAddPlanned(false); setSelectedServiceId(''); }} className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Отмена</button>
-                                <button type="button" onClick={handleAddPlannedLabor} disabled={!selectedServiceId} className="flex-1 rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">Добавить</button>
+                                <button type="button" onClick={() => { setShowAddPlanned(false); setSelectedService(null); }} className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Отмена</button>
+                                <button type="button" onClick={handleAddPlannedLabor} disabled={!selectedService} className="flex-1 rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">Добавить</button>
                               </div>
                             </div>
                           ) : (
@@ -1455,18 +1436,19 @@ function AppointmentDetailModal({
                         <div className="mt-2">
                           {showAddPlanned && plannedTab === 'PART' ? (
                             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
-                              <select value={selectedPartId} onChange={(e) => setSelectedPartId(e.target.value)} className={inputCls}>
-                                <option value="">Выберите материал из каталога</option>
-                                {parts?.data?.map((p) => (
-                                  <option key={p.id} value={p.id}>
-                                    {p.name}{p.brand ? ` (${p.brand})` : ''} — {formatMoney(p.sellPrice)}
-                                  </option>
-                                ))}
-                              </select>
+                              <SearchablePartSelect
+                                inputClassName={inputCls}
+                                onSelect={(p) => setSelectedPart(p)}
+                              />
+                              {selectedPart && (
+                                <div className="rounded bg-white px-3 py-2 text-xs text-gray-600">
+                                  {selectedPart.name} — {formatMoney(selectedPart.sellPrice)}
+                                </div>
+                              )}
                               <input type="number" min={1} value={partQty} onChange={(e) => setPartQty(e.target.value)} placeholder="Кол-во" className={inputCls} />
                               <div className="flex gap-2">
-                                <button type="button" onClick={() => { setShowAddPlanned(false); setSelectedPartId(''); setPartQty('1'); }} className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Отмена</button>
-                                <button type="button" onClick={handleAddPlannedPart} disabled={!selectedPartId} className="flex-1 rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">Добавить</button>
+                                <button type="button" onClick={() => { setShowAddPlanned(false); setSelectedPart(null); setPartQty('1'); }} className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">Отмена</button>
+                                <button type="button" onClick={handleAddPlannedPart} disabled={!selectedPart} className="flex-1 rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50">Добавить</button>
                               </div>
                             </div>
                           ) : (
@@ -1855,16 +1837,6 @@ function WorkOrderDetailModal({
     queryFn: () => apiFetch('/users?limit=50&role=MECHANIC'),
   });
 
-  const { data: services } = useQuery<{ data: { id: string; name: string; price: string | number; normHours: string | number | null }[] }>({
-    queryKey: ['services-catalog'],
-    queryFn: () => apiFetch('/services?limit=200&sort=name&order=asc'),
-  });
-
-  const { data: parts } = useQuery<{ data: { id: string; name: string; sellPrice: string | number; brand: string | null }[] }>({
-    queryKey: ['parts-catalog'],
-    queryFn: () => apiFetch('/parts?limit=200&sort=name&order=asc'),
-  });
-
   const [complaints, setComplaints] = useState('');
   const [checklist, setChecklist] = useState<InspectionChecklist>(createEmptyChecklist());
   const [mechanicId, setMechanicId] = useState('');
@@ -1874,8 +1846,8 @@ function WorkOrderDetailModal({
   // Add item
   const [showAddItem, setShowAddItem] = useState(false);
   const [addItemTab, setAddItemTab] = useState<'LABOR' | 'PART'>('LABOR');
-  const [selectedServiceId, setSelectedServiceId] = useState('');
-  const [selectedPartId, setSelectedPartId] = useState('');
+  const [selectedService, setSelectedService] = useState<{ id: string; name: string; price: string | number; normHours: string | number | null } | null>(null);
+  const [selectedPart, setSelectedPart] = useState<{ id: string; name: string; sellPrice: string | number; brand: string | null } | null>(null);
   const [partQty, setPartQty] = useState('1');
 
   if (wo && !initialized) {
@@ -1965,9 +1937,7 @@ function WorkOrderDetailModal({
     }
   }
 
-  async function handleAddServiceFromChecklist(serviceId: string) {
-    const svc = services?.data?.find((s) => s.id === serviceId);
-    if (!svc) return;
+  async function handleAddServiceFromChecklist(svc: { id: string; name: string; normHours: string | number | null }) {
     setSaving(true);
     setError('');
     try {
@@ -2025,25 +1995,24 @@ function WorkOrderDetailModal({
   }
 
   async function handleAddLabor() {
-    const svc = services?.data?.find((s) => s.id === selectedServiceId);
-    if (!svc) return;
+    if (!selectedService) return;
     setSaving(true);
     setError('');
     try {
-      const normHours = svc.normHours ? Number(svc.normHours) : 1;
+      const normHours = selectedService.normHours ? Number(selectedService.normHours) : 1;
       await apiFetch(`/work-orders/${workOrderId}/items`, {
         method: 'POST',
         body: JSON.stringify({
           type: 'LABOR',
-          description: svc.name,
+          description: selectedService.name,
           quantity: normHours,
           unitPrice: 2000,
           normHours,
-          serviceId: svc.id,
+          serviceId: selectedService.id,
           mechanicId: mechanicId || undefined,
         }),
       });
-      setSelectedServiceId('');
+      setSelectedService(null);
       setShowAddItem(false);
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
     } catch (err: any) {
@@ -2054,8 +2023,7 @@ function WorkOrderDetailModal({
   }
 
   async function handleAddPart() {
-    const part = parts?.data?.find((p) => p.id === selectedPartId);
-    if (!part) return;
+    if (!selectedPart) return;
     setSaving(true);
     setError('');
     try {
@@ -2063,13 +2031,13 @@ function WorkOrderDetailModal({
         method: 'POST',
         body: JSON.stringify({
           type: 'PART',
-          description: part.name,
+          description: selectedPart.name,
           quantity: Number(partQty) || 1,
-          unitPrice: Number(part.sellPrice),
-          partId: part.id,
+          unitPrice: Number(selectedPart.sellPrice),
+          partId: selectedPart.id,
         }),
       });
-      setSelectedPartId('');
+      setSelectedPart(null);
       setPartQty('1');
       setShowAddItem(false);
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
@@ -2215,7 +2183,6 @@ function WorkOrderDetailModal({
                   <InspectionChecklistEditor
                     checklist={checklist}
                     onChange={setChecklist}
-                    services={services?.data || []}
                     onAddService={handleAddServiceFromChecklist}
                     onRemoveRecommendation={handleRemoveRecommendation}
                     woItems={wo.items}
@@ -2256,12 +2223,10 @@ function WorkOrderDetailModal({
                     setShowAddItem={setShowAddItem}
                     addItemTab={addItemTab}
                     setAddItemTab={setAddItemTab}
-                    services={services?.data || []}
-                    parts={parts?.data || []}
-                    selectedServiceId={selectedServiceId}
-                    setSelectedServiceId={setSelectedServiceId}
-                    selectedPartId={selectedPartId}
-                    setSelectedPartId={setSelectedPartId}
+                    selectedService={selectedService}
+                    setSelectedService={setSelectedService}
+                    selectedPart={selectedPart}
+                    setSelectedPart={setSelectedPart}
                     partQty={partQty}
                     setPartQty={setPartQty}
                     saving={saving}
@@ -2656,21 +2621,19 @@ function EditablePartRow({
 function InspectionChecklistEditor({
   checklist,
   onChange,
-  services,
   onAddService,
   onRemoveRecommendation,
   woItems,
 }: {
   checklist: InspectionChecklist;
   onChange: (c: InspectionChecklist) => void;
-  services: { id: string; name: string; normHours: string | number | null }[];
-  onAddService: (serviceId: string) => void;
+  onAddService: (svc: { id: string; name: string; normHours: string | number | null }) => void;
   onRemoveRecommendation: (itemKey: string, description: string) => void;
   woItems: { id: string; description: string; recommended: boolean }[];
 }) {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [suggestForItem, setSuggestForItem] = useState<string | null>(null);
-  const [suggestServiceId, setSuggestServiceId] = useState('');
+  const [suggestService, setSuggestService] = useState<{ id: string; name: string; normHours: string | number | null } | null>(null);
 
   function toggleGroup(key: string) {
     setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -2700,7 +2663,7 @@ function InspectionChecklistEditor({
       });
       if (!wasChecked) {
         setSuggestForItem(itemKey);
-        setSuggestServiceId('');
+        setSuggestService(null);
       }
     }
   }
@@ -2788,32 +2751,29 @@ function InspectionChecklistEditor({
                         {suggestForItem === item.key && (
                           <div className="mt-1 ml-6 rounded border border-amber-200 bg-amber-50 px-3 py-2">
                             <p className="text-xs font-medium text-amber-800 mb-1">Добавить работу?</p>
-                            <div className="flex items-center gap-2">
-                              <select
-                                value={suggestServiceId}
-                                onChange={(e) => setSuggestServiceId(e.target.value)}
-                                className="flex-1 rounded border border-amber-300 bg-white px-2 py-1 text-[11px] text-gray-700 focus:border-amber-400 focus:outline-none"
-                              >
-                                <option value="">Выберите из каталога</option>
-                                {services.map((s) => (
-                                  <option key={s.id} value={s.id}>{s.name}</option>
-                                ))}
-                              </select>
+                            <div className="space-y-2">
+                              <SearchableServiceSelect
+                                onSelect={(svc) => setSuggestService(svc)}
+                                inputClassName="w-full rounded border border-amber-300 bg-white px-2 py-1 text-[11px] text-gray-700 focus:border-amber-400 focus:outline-none"
+                              />
+                              {suggestService && (
+                                <div className="text-[11px] text-amber-700">Выбрано: <span className="font-medium">{suggestService.name}</span></div>
+                              )}
+                              <div className="flex items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (suggestServiceId && suggestForItem) {
-                                    const svc = services.find((s) => s.id === suggestServiceId);
+                                  if (suggestService && suggestForItem) {
                                     onChange({
                                       ...checklist,
-                                      [suggestForItem]: { ...checklist[suggestForItem], recommended: true, recommendedDescription: svc?.name },
+                                      [suggestForItem]: { ...checklist[suggestForItem], recommended: true, recommendedDescription: suggestService.name },
                                     });
-                                    onAddService(suggestServiceId);
+                                    onAddService(suggestService);
                                     setSuggestForItem(null);
-                                    setSuggestServiceId('');
+                                    setSuggestService(null);
                                   }
                                 }}
-                                disabled={!suggestServiceId}
+                                disabled={!suggestService}
                                 className="rounded bg-amber-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-amber-600 disabled:opacity-50"
                               >
                                 Добавить
@@ -2822,12 +2782,13 @@ function InspectionChecklistEditor({
                                 type="button"
                                 onClick={() => {
                                   setSuggestForItem(null);
-                                  setSuggestServiceId('');
+                                  setSuggestService(null);
                                 }}
                                 className="rounded border border-gray-300 bg-white px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
                               >
                                 Пропустить
                               </button>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -2863,12 +2824,10 @@ function ItemsSection({
   setShowAddItem,
   addItemTab,
   setAddItemTab,
-  services,
-  parts,
-  selectedServiceId,
-  setSelectedServiceId,
-  selectedPartId,
-  setSelectedPartId,
+  selectedService,
+  setSelectedService,
+  selectedPart,
+  setSelectedPart,
   partQty,
   setPartQty,
   saving,
@@ -2891,12 +2850,10 @@ function ItemsSection({
   setShowAddItem: (v: boolean) => void;
   addItemTab: 'LABOR' | 'PART';
   setAddItemTab: (v: 'LABOR' | 'PART') => void;
-  services: { id: string; name: string; price: string | number; normHours: string | number | null }[];
-  parts: { id: string; name: string; sellPrice: string | number; brand: string | null }[];
-  selectedServiceId: string;
-  setSelectedServiceId: (v: string) => void;
-  selectedPartId: string;
-  setSelectedPartId: (v: string) => void;
+  selectedService: { id: string; name: string; price: string | number; normHours: string | number | null } | null;
+  setSelectedService: (v: { id: string; name: string; price: string | number; normHours: string | number | null } | null) => void;
+  selectedPart: { id: string; name: string; sellPrice: string | number; brand: string | null } | null;
+  setSelectedPart: (v: { id: string; name: string; sellPrice: string | number; brand: string | null } | null) => void;
   partQty: string;
   setPartQty: (v: string) => void;
   saving: boolean;
@@ -2996,21 +2953,16 @@ function ItemsSection({
                   <div className="mt-2">
                     {showAddItem && addItemTab === 'LABOR' ? (
                       <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
-                        <select value={selectedServiceId} onChange={(e) => setSelectedServiceId(e.target.value)} className={inputCls}>
-                          <option value="">Выберите работу из каталога</option>
-                          {services.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name} — {s.normHours ? `${Number(s.normHours)} н/ч` : '—'}
-                            </option>
-                          ))}
-                        </select>
-                        {selectedServiceId && (() => {
-                          const svc = services.find((s) => s.id === selectedServiceId);
-                          if (!svc) return null;
-                          const norm = svc.normHours ? Number(svc.normHours) : 1;
+                        <SearchableServiceSelect
+                          onSelect={(svc) => setSelectedService(svc)}
+                          inputClassName={inputCls}
+                        />
+                        {selectedService && (() => {
+                          const norm = selectedService.normHours ? Number(selectedService.normHours) : 1;
                           const total = 2000 * norm;
                           return (
                             <div className="rounded bg-white px-3 py-2 text-xs text-gray-600 space-y-0.5">
+                              <div className="flex justify-between"><span>Выбрано:</span><span className="font-medium text-gray-900 truncate ml-2">{selectedService.name}</span></div>
                               <div className="flex justify-between"><span>Цена н/ч:</span><span className="font-medium">2 000 ₽</span></div>
                               <div className="flex justify-between"><span>Норма:</span><span className="font-medium">{norm}</span></div>
                               <div className="flex justify-between"><span>Всего:</span><span className="font-semibold text-gray-900">{formatMoney(total)}</span></div>
@@ -3021,7 +2973,7 @@ function ItemsSection({
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => { setShowAddItem(false); setSelectedServiceId(''); }}
+                            onClick={() => { setShowAddItem(false); setSelectedService(null); }}
                             className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
                           >
                             Отмена
@@ -3029,7 +2981,7 @@ function ItemsSection({
                           <button
                             type="button"
                             onClick={onAddLabor}
-                            disabled={saving || !selectedServiceId}
+                            disabled={saving || !selectedService}
                             className="flex-1 rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
                           >
                             Добавить
@@ -3083,14 +3035,10 @@ function ItemsSection({
                   <div className="mt-2">
                     {showAddItem && addItemTab === 'PART' ? (
                       <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
-                        <select value={selectedPartId} onChange={(e) => setSelectedPartId(e.target.value)} className={inputCls}>
-                          <option value="">Выберите материал из каталога</option>
-                          {parts.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}{p.brand ? ` (${p.brand})` : ''} — {formatMoney(p.sellPrice)}
-                            </option>
-                          ))}
-                        </select>
+                        <SearchablePartSelect
+                          onSelect={(p) => setSelectedPart(p)}
+                          inputClassName={inputCls}
+                        />
                         <input
                           type="number"
                           min={1}
@@ -3099,13 +3047,12 @@ function ItemsSection({
                           placeholder="Кол-во"
                           className={inputCls}
                         />
-                        {selectedPartId && (() => {
-                          const p = parts.find((x) => x.id === selectedPartId);
-                          if (!p) return null;
-                          const total = Number(p.sellPrice) * (Number(partQty) || 1);
+                        {selectedPart && (() => {
+                          const total = Number(selectedPart.sellPrice) * (Number(partQty) || 1);
                           return (
                             <div className="rounded bg-white px-3 py-2 text-xs text-gray-600 space-y-0.5">
-                              <div className="flex justify-between"><span>Цена:</span><span className="font-medium">{formatMoney(p.sellPrice)}</span></div>
+                              <div className="flex justify-between"><span>Выбрано:</span><span className="font-medium text-gray-900 truncate ml-2">{selectedPart.name}</span></div>
+                              <div className="flex justify-between"><span>Цена:</span><span className="font-medium">{formatMoney(selectedPart.sellPrice)}</span></div>
                               <div className="flex justify-between"><span>Кол-во:</span><span className="font-medium">{Number(partQty) || 1}</span></div>
                               <div className="flex justify-between"><span>Всего:</span><span className="font-semibold text-gray-900">{formatMoney(total)}</span></div>
                               <div className="flex justify-between"><span>в т.ч. НДС:</span><span>{formatVat(total)}</span></div>
@@ -3115,7 +3062,7 @@ function ItemsSection({
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => { setShowAddItem(false); setSelectedPartId(''); setPartQty('1'); }}
+                            onClick={() => { setShowAddItem(false); setSelectedPart(null); setPartQty('1'); }}
                             className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
                           >
                             Отмена
@@ -3123,7 +3070,7 @@ function ItemsSection({
                           <button
                             type="button"
                             onClick={onAddPart}
-                            disabled={saving || !selectedPartId}
+                            disabled={saving || !selectedPart}
                             className="flex-1 rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
                           >
                             Добавить
@@ -3278,6 +3225,144 @@ function RecommendedSection({
               Сумма: {formatMoney(approvedTotal)}
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Searchable Service Select ──────────────────────────────────────────────
+
+function SearchableServiceSelect({
+  onSelect,
+  inputClassName,
+}: {
+  onSelect: (service: { id: string; name: string; price: string | number; normHours: string | number | null }) => void;
+  inputClassName: string;
+}) {
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setShowDropdown(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const { data } = useQuery<{ data: { id: string; name: string; price: string | number; normHours: string | number | null }[] }>({
+    queryKey: ['services-search', debouncedSearch],
+    queryFn: () => apiFetch(`/services?limit=20&sort=name&order=asc&search=${encodeURIComponent(debouncedSearch)}`),
+    enabled: debouncedSearch.length >= 2,
+  });
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => { setSearch(e.target.value); setShowDropdown(true); }}
+        onFocus={() => { if (search.length >= 2) setShowDropdown(true); }}
+        placeholder="Введите название работы (мин. 2 символа)..."
+        className={inputClassName}
+      />
+      {showDropdown && data?.data && data.data.length > 0 && (
+        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+          {data.data.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => { onSelect(s); setSearch(''); setShowDropdown(false); }}
+              className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-primary-50"
+            >
+              <span className="text-sm text-gray-900">{s.name}</span>
+              <span className="ml-2 whitespace-nowrap text-xs text-gray-500">
+                {s.normHours ? `${Number(s.normHours)} н/ч` : '—'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {showDropdown && debouncedSearch.length >= 2 && data?.data?.length === 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm text-gray-500 shadow-lg">
+          Не найдено
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Searchable Part Select ─────────────────────────────────────────────────
+
+function SearchablePartSelect({
+  onSelect,
+  inputClassName,
+}: {
+  onSelect: (part: { id: string; name: string; sellPrice: string | number; brand: string | null }) => void;
+  inputClassName: string;
+}) {
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setShowDropdown(false);
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const { data } = useQuery<{ data: { id: string; name: string; sellPrice: string | number; brand: string | null }[] }>({
+    queryKey: ['parts-search', debouncedSearch],
+    queryFn: () => apiFetch(`/parts?limit=20&sort=name&order=asc&search=${encodeURIComponent(debouncedSearch)}`),
+    enabled: debouncedSearch.length >= 2,
+  });
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => { setSearch(e.target.value); setShowDropdown(true); }}
+        onFocus={() => { if (search.length >= 2) setShowDropdown(true); }}
+        placeholder="Введите название или артикул (мин. 2 символа)..."
+        className={inputClassName}
+      />
+      {showDropdown && data?.data && data.data.length > 0 && (
+        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+          {data.data.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => { onSelect(p); setSearch(''); setShowDropdown(false); }}
+              className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-primary-50"
+            >
+              <span className="text-sm text-gray-900 truncate">{p.name}</span>
+              <span className="ml-2 whitespace-nowrap text-xs text-gray-500">
+                {formatMoney(p.sellPrice)}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {showDropdown && debouncedSearch.length >= 2 && data?.data?.length === 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm text-gray-500 shadow-lg">
+          Не найдено
         </div>
       )}
     </div>
