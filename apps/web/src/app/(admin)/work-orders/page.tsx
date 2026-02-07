@@ -71,12 +71,13 @@ export default function WorkOrdersPage() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
   const { data: tableData, isLoading: tableLoading } = useQuery<PaginatedResponse>({
-    queryKey: ['work-orders-list', page, statusFilter],
+    queryKey: ['work-orders-list', page, statusFilter, search],
     queryFn: () =>
-      apiFetch(`/work-orders?page=${page}&limit=20&sort=createdAt&order=desc${statusFilter ? `&status=${statusFilter}` : ''}`),
+      apiFetch(`/work-orders?page=${page}&limit=20&sort=createdAt&order=desc${statusFilter ? `&status=${statusFilter}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`),
   });
 
   return (
@@ -102,6 +103,13 @@ export default function WorkOrdersPage() {
             <option key={k} value={k}>{v}</option>
           ))}
         </select>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          placeholder="Поиск по номеру, клиенту, авто..."
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+        />
       </div>
 
       {tableLoading ? (

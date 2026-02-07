@@ -161,12 +161,14 @@ export class WorkOrdersController {
   @ApiQuery({ name: 'status', required: false, enum: WorkOrderStatus })
   @ApiQuery({ name: 'mechanicId', required: false })
   @ApiQuery({ name: 'clientId', required: false })
+  @ApiQuery({ name: 'search', required: false })
   findAll(
     @CurrentTenant() tenantId: string,
     @Query() query: PaginationDto & {
       status?: WorkOrderStatus;
       mechanicId?: string;
       clientId?: string;
+      search?: string;
     },
   ) {
     return this.workOrdersService.findAll(tenantId, {
@@ -177,6 +179,7 @@ export class WorkOrdersController {
       status: query.status,
       mechanicId: query.mechanicId,
       clientId: query.clientId,
+      search: query.search,
     });
   }
 

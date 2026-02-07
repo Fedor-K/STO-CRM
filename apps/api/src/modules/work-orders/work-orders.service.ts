@@ -92,15 +92,27 @@ export class WorkOrdersService {
       status?: WorkOrderStatus;
       mechanicId?: string;
       clientId?: string;
+      search?: string;
     },
   ): Promise<PaginatedResponse<any>> {
-    const { page, limit, sort, order, status, mechanicId, clientId } = params;
+    const { page, limit, sort, order, status, mechanicId, clientId, search } = params;
     const skip = (page - 1) * limit;
 
     const where: any = { tenantId };
     if (status) where.status = status;
     if (mechanicId) where.mechanicId = mechanicId;
     if (clientId) where.clientId = clientId;
+    if (search) {
+      const s = search.trim();
+      where.OR = [
+        { orderNumber: { contains: s, mode: 'insensitive' } },
+        { client: { firstName: { contains: s, mode: 'insensitive' } } },
+        { client: { lastName: { contains: s, mode: 'insensitive' } } },
+        { vehicle: { licensePlate: { contains: s, mode: 'insensitive' } } },
+        { vehicle: { make: { contains: s, mode: 'insensitive' } } },
+        { vehicle: { model: { contains: s, mode: 'insensitive' } } },
+      ];
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.workOrder.findMany({
