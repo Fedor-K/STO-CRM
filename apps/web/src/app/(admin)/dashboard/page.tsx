@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/providers/auth-provider';
@@ -534,6 +534,10 @@ function CreateAppointmentModal({
   // Client mode: 'existing' or 'new'
   const [isNewClient, setIsNewClient] = useState(false);
   const [clientId, setClientId] = useState('');
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientLabel, setClientLabel] = useState('');
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const clientDropdownRef = useRef<HTMLDivElement>(null);
   // New client fields
   const [newLastName, setNewLastName] = useState('');
   const [newFirstName, setNewFirstName] = useState('');
@@ -561,9 +565,26 @@ function CreateAppointmentModal({
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const { data: clients, refetch: refetchClients } = useQuery<{ data: { id: string; firstName: string; lastName: string; email: string }[] }>({
-    queryKey: ['clients-for-appt'],
-    queryFn: () => apiFetch('/users?limit=100&sort=firstName&order=asc&role=CLIENT'),
+  const [debouncedClientSearch, setDebouncedClientSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedClientSearch(clientSearch), 300);
+    return () => clearTimeout(t);
+  }, [clientSearch]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(e.target as Node)) {
+        setShowClientDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const { data: clients, refetch: refetchClients } = useQuery<{ data: { id: string; firstName: string; lastName: string; phone: string | null; email: string }[] }>({
+    queryKey: ['clients-for-appt', debouncedClientSearch],
+    queryFn: () => apiFetch(`/users?limit=20&sort=lastName&order=asc&role=CLIENT${debouncedClientSearch.length >= 2 ? `&search=${encodeURIComponent(debouncedClientSearch)}` : ''}`),
+    enabled: !isNewClient && debouncedClientSearch.length >= 2,
   });
 
   const { data: advisors } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
@@ -688,7 +709,7 @@ function CreateAppointmentModal({
               <label className="block text-sm font-medium text-gray-700">Клиент *</label>
               <button
                 type="button"
-                onClick={() => { setIsNewClient(!isNewClient); setClientId(''); setVehicleId(''); setIsNewVehicle(false); }}
+                onClick={() => { setIsNewClient(!isNewClient); setClientId(''); setClientLabel(''); setClientSearch(''); setVehicleId(''); setIsNewVehicle(false); }}
                 className="text-xs font-medium text-primary-600 hover:text-primary-700"
               >
                 {isNewClient ? 'Выбрать существующего' : '+ Новый клиент'}
@@ -743,17 +764,62 @@ function CreateAppointmentModal({
                 />
               </div>
             ) : (
-              <select
-                value={clientId}
-                onChange={(e) => { setClientId(e.target.value); setVehicleId(''); setIsNewVehicle(false); }}
-                className={inputCls}
-                required
-              >
-                <option value="">Выберите клиента</option>
-                {clients?.data?.map((c) => (
-                  <option key={c.id} value={c.id}>{c.lastName} {c.firstName} ({c.email})</option>
-                ))}
-              </select>
+              <div className="relative" ref={clientDropdownRef}>
+                <input
+                  type="text"
+                  value={clientId ? clientLabel : clientSearch}
+                  onChange={(e) => {
+                    if (clientId) {
+                      setClientId('');
+                      setClientLabel('');
+                      setVehicleId('');
+                      setIsNewVehicle(false);
+                    }
+                    setClientSearch(e.target.value);
+                    setShowClientDropdown(true);
+                  }}
+                  onFocus={() => { if (clientSearch.length >= 2) setShowClientDropdown(true); }}
+                  placeholder="Введите ФИО или телефон (мин. 2 символа)..."
+                  className={inputCls}
+                />
+                {clientId && (
+                  <button
+                    type="button"
+                    onClick={() => { setClientId(''); setClientLabel(''); setClientSearch(''); setVehicleId(''); setIsNewVehicle(false); }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    ✕
+                  </button>
+                )}
+                {showClientDropdown && clients?.data && clients.data.length > 0 && !clientId && (
+                  <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+                    {clients.data.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setClientId(c.id);
+                          setClientLabel(`${c.lastName} ${c.firstName}${c.phone ? ` (${c.phone})` : ''}`);
+                          setClientSearch('');
+                          setShowClientDropdown(false);
+                          setVehicleId('');
+                          setIsNewVehicle(false);
+                        }}
+                        className="flex w-full flex-col px-3 py-2 text-left hover:bg-primary-50"
+                      >
+                        <span className="text-sm font-medium text-gray-900">{c.lastName} {c.firstName}</span>
+                        <span className="text-xs text-gray-500">{c.phone || c.email}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {showClientDropdown && debouncedClientSearch.length >= 2 && clients?.data?.length === 0 && (
+                  <div className="absolute z-50 mt-1 w-full rounded-lg border border-gray-200 bg-white px-3 py-3 text-sm text-gray-500 shadow-lg">
+                    Клиент не найден
+                  </div>
+                )}
+                <input type="hidden" value={clientId} required={!isNewClient} />
+              </div>
             )}
           </div>
 
