@@ -41,7 +41,7 @@ export default function VehiclesPage() {
   const { data, isLoading } = useQuery<PaginatedResponse>({
     queryKey: ['vehicles', page, search],
     queryFn: () =>
-      apiFetch(`/vehicles?page=${page}&limit=20${search ? `&search=${encodeURIComponent(search)}` : ''}`),
+      apiFetch(`/vehicles?page=${page}&limit=20&sort=make&order=asc${search ? `&search=${encodeURIComponent(search)}` : ''}`),
   });
 
   const deleteMutation = useMutation({
