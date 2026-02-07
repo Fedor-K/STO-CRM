@@ -20,6 +20,8 @@ interface WorkOrderItem {
   unitPrice: string | number;
   totalPrice: string | number;
   normHours: string | number | null;
+  vatRate: string | null;
+  vatAmount: string | number | null;
   recommended: boolean;
   approvedByClient: boolean | null;
 }
@@ -401,6 +403,7 @@ export default function WorkOrderDetailPage() {
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Кол-во</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Цена</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Сумма</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">НДС</th>
                       {!isLocked && <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Действия</th>}
                     </tr>
                   </thead>
@@ -428,6 +431,13 @@ export default function WorkOrderDetailPage() {
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{Number(item.quantity)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{formatMoney(item.unitPrice)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">{formatMoney(item.totalPrice)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">
+                          {item.vatRate ? (
+                            <span title={item.vatAmount ? formatMoney(item.vatAmount) : undefined}>
+                              {item.vatRate}
+                            </span>
+                          ) : '—'}
+                        </td>
                         {!isLocked && (
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
                               <button
