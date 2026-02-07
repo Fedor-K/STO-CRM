@@ -28,12 +28,34 @@ docker/            — Dockerfile'ы и docker-compose
 | `/dashboard` | `app/(admin)/dashboard/page.tsx` | Дашборд с воронкой и статистикой |
 | `/clients` | `app/(admin)/clients/page.tsx` | Клиенты — карточки с профилем |
 | `/calendar` | `app/(admin)/calendar/page.tsx` | Недельный календарь записей (06:00–20:00) |
-| `/work-orders` | `app/(admin)/work-orders/page.tsx` | Заказ-наряды |
-| `/vehicles` | `app/(admin)/vehicles/page.tsx` | Автомобили |
+| `/work-orders` | `app/(admin)/work-orders/page.tsx` | Заказ-наряды (поиск по номеру, клиенту, авто) |
+| `/work-orders/[id]` | `app/(admin)/work-orders/[id]/page.tsx` | Детали заказ-наряда |
+| `/vehicles` | `app/(admin)/vehicles/page.tsx` | Автомобили (раскрывающиеся строки с историей ЗН) |
 | `/services` | `app/(admin)/services/page.tsx` | Услуги |
 | `/inventory` | `app/(admin)/inventory/page.tsx` | Склад |
 | `/finance` | `app/(admin)/finance/page.tsx` | Финансы |
-| `/users` | `app/(admin)/users/page.tsx` | Пользователи |
+| `/employees` | `app/(admin)/employees/page.tsx` | Сотрудники (фильтр по ролям, CRUD, заменяет Users в навигации) |
+| `/users` | `app/(admin)/users/page.tsx` | Пользователи (доступен по прямому URL) |
+
+### Боковая панель (Sidebar)
+- Сворачиваемая: `w-64` → `w-16`, состояние в localStorage (`sidebar-collapsed`)
+- Иконки Heroicons для каждого пункта, тултипы при сворачивании
+- Кнопка-шеврон внизу панели для сворачивания/разворачивания
+
+### Заказ-наряды (`/work-orders`)
+- **Поиск:** `&search=` — ищет по номеру ЗН, ФИО клиента, госномеру/марке/модели авто (бэкенд Prisma OR clause)
+- **Табы позиций:** Работы (LABOR) и Материалы (PART) в раздельных вкладках вместо общего списка
+- **Автокомплит:** выбор услуг и запчастей через searchable combobox
+
+### Автомобили (`/vehicles`)
+- Раскрывающиеся строки: клик по строке авто показывает историю заказ-нарядов
+
+### Сотрудники (`/employees`)
+- Заменяет «Пользователи» в навигации
+- Фильтр по ролям: Все / MECHANIC / RECEPTIONIST / MANAGER / OWNER
+- Поиск по ФИО
+- Исключает CLIENT-роль из выдачи
+- Создание: автогенерация email (`{random}@employee.local`) и пароля
 
 ### Календарь записей (`/calendar`)
 - Недельная сетка Пн–Вс, 06:00–20:00, нативный Date + Tailwind (без внешних библиотек)
@@ -127,6 +149,39 @@ ssh root@178.72.139.156 "/opt/STO-CRM/scripts/backup.sh"
 ssh root@178.72.139.156 "/opt/STO-CRM/scripts/restore.sh"
 ssh root@178.72.139.156 "/opt/STO-CRM/scripts/restore.sh daily/stocrm_2026-02-05_09-14.sql.gz"
 ```
+
+## Интеграция с 1С
+
+### Сервер 1С
+- **IP:** 185.222.161.252, Windows Server
+- **SSH:** `Administrator@185.222.161.252`
+- **1С:** база `D:\Base`, пользователь `Администратор`
+- **API Gateway:** FastAPI + COM-коннектор, `C:\temp\api_gateway.py`, порт 8080
+- **Запуск:** scheduled task `API-Gateway` (пользователь `VDSKA\22Linia1`)
+- **Python:** `C:\Python311-32\python.exe` (32-bit для COM)
+
+### Импортированные данные (из 1С → STO-CRM)
+- **Клиенты:** 6,470
+- **Автомобили:** ~8,900
+- **Заказ-наряды:** 24,175 (из 25,201 в 1С — 1,026 пропущены из-за отсутствия привязки к авто)
+- **Сотрудники:** 37 (MECHANIC-роль)
+- **Механики на ЗН:** 21,222 из 24,175 привязаны к мастеру
+- **Услуги:** импортированы из 1С + нормочасы
+
+### Верификация данных (проведена 2026-02-06)
+- Суммы ЗН: 0 расхождений (пересчитаны из позиций)
+- Механики: 0 несовпадений имён
+- Клиенты: 6,470 из 1С + 3 ручных = 6,473 в CRM
+
+### Скрипты импорта (`scripts/`)
+| Скрипт | Описание |
+|--------|----------|
+| `import-1c-data.ts` | Основной импорт данных из 1С JSON |
+| `import-employees.ts` | Импорт сотрудников с генерацией email/пароля |
+| `import-services-1c.ts` | Импорт услуг из 1С |
+| `import-parts.ts` | Импорт запчастей |
+| `import-work-orders.ts` | Импорт заказ-нарядов (API-версия) |
+| `import-work-orders-sql.ts` | Импорт заказ-нарядов (SQL-версия, основная) |
 
 ## Юридические требования (РФ)
 
