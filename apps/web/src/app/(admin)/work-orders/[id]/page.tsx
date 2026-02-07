@@ -491,7 +491,16 @@ export default function WorkOrderDetailPage() {
                         )}
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{Number(item.quantity)}</td>
                         {filterType === 'PART' && (() => {
-                          const stocks = item.part?.warehouseStock || [];
+                          if (!item.part) {
+                            return (
+                              <>
+                                <td className="whitespace-nowrap px-3 py-3 text-right text-sm text-gray-400">—</td>
+                                <td className="whitespace-nowrap px-3 py-3 text-right text-sm text-gray-400">—</td>
+                                <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-400">—</td>
+                              </>
+                            );
+                          }
+                          const stocks = item.part.warehouseStock || [];
                           const totalQty = stocks.reduce((s: number, ws: any) => s + ws.quantity, 0);
                           const totalRes = stocks.reduce((s: number, ws: any) => s + ws.reserved, 0);
                           const available = totalQty - totalRes;
