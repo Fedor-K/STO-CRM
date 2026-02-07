@@ -445,6 +445,7 @@ export default function WorkOrderDetailPage() {
                       {filterType === 'PART' && <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Остаток</th>}
                       {filterType === 'PART' && <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Резерв</th>}
                       {filterType === 'PART' && <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Склад</th>}
+                      {filterType === 'PART' && <th className="px-3 py-3 text-center text-xs font-medium uppercase text-gray-500">Ед.</th>}
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Цена</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Сумма</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">НДС</th>
@@ -497,6 +498,7 @@ export default function WorkOrderDetailPage() {
                                 <td className="whitespace-nowrap px-3 py-3 text-right text-sm text-gray-400">—</td>
                                 <td className="whitespace-nowrap px-3 py-3 text-right text-sm text-gray-400">—</td>
                                 <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-400">—</td>
+                                <td className="whitespace-nowrap px-3 py-3 text-center text-sm text-gray-400">—</td>
                               </>
                             );
                           }
@@ -506,8 +508,8 @@ export default function WorkOrderDetailPage() {
                           const available = totalQty - totalRes;
                           const needed = Number(item.quantity);
                           const stockColor = available >= needed ? 'text-green-600' : available > 0 ? 'text-orange-500' : 'text-red-500';
-                          const whTooltip = stocks.filter((ws: any) => ws.quantity > 0).map((ws: any) => `${ws.warehouse.name}: ${ws.quantity} (рез. ${ws.reserved})`).join('\n');
-                          const primaryWh = stocks.filter((ws: any) => ws.quantity > 0).sort((a: any, b: any) => b.quantity - a.quantity)[0];
+                          const whTooltip = stocks.map((ws: any) => `${ws.warehouse.name}: ${ws.quantity} (рез. ${ws.reserved})`).join('\n');
+                          const primaryWh = stocks.sort((a: any, b: any) => b.quantity - a.quantity)[0];
                           return (
                             <>
                               <td className={`whitespace-nowrap px-3 py-3 text-right text-sm font-medium ${stockColor}`} title={whTooltip}>
@@ -518,6 +520,9 @@ export default function WorkOrderDetailPage() {
                               </td>
                               <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-500" title={whTooltip}>
                                 {primaryWh ? primaryWh.warehouse.name : '—'}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3 text-center text-sm text-gray-500">
+                                {item.part?.unit || 'шт'}
                               </td>
                             </>
                           );
