@@ -162,7 +162,7 @@ export default function ClientsPage() {
   const { data, isLoading } = useQuery<PaginatedResponse<ClientData>>({
     queryKey: ['clients', page, search],
     queryFn: () =>
-      apiFetch(`/users?page=${page}&limit=20&sort=createdAt&order=desc&role=CLIENT${search ? `&search=${encodeURIComponent(search)}` : ''}`),
+      apiFetch(`/users?page=${page}&limit=20&sort=lastName&order=asc&role=CLIENT${search ? `&search=${encodeURIComponent(search)}` : ''}`),
   });
 
   const deleteMutation = useMutation({
