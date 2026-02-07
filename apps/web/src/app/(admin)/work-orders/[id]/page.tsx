@@ -131,7 +131,7 @@ export default function WorkOrderDetailPage() {
   const queryClient = useQueryClient();
   const id = params.id as string;
 
-  const [tab, setTab] = useState<'items' | 'logs' | 'activity'>('items');
+  const [tab, setTab] = useState<'labor' | 'parts' | 'logs' | 'activity'>('labor');
   const [showAddItem, setShowAddItem] = useState(false);
   const [editItem, setEditItem] = useState<WorkOrderDetail['items'][0] | null>(null);
 
@@ -344,10 +344,16 @@ export default function WorkOrderDetailPage() {
       <div className="mt-6">
         <div className="flex gap-1 border-b border-gray-200">
           <button
-            onClick={() => setTab('items')}
-            className={`px-4 py-2 text-sm font-medium ${tab === 'items' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+            onClick={() => setTab('labor')}
+            className={`px-4 py-2 text-sm font-medium ${tab === 'labor' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
           >
-            Позиции ({wo.items.length})
+            Работы ({wo.items.filter((i) => i.type === 'LABOR').length})
+          </button>
+          <button
+            onClick={() => setTab('parts')}
+            className={`px-4 py-2 text-sm font-medium ${tab === 'parts' ? 'border-b-2 border-primary-600 text-primary-600' : 'text-gray-500 hover:text-gray-700'}`}
+          >
+            Материалы ({wo.items.filter((i) => i.type === 'PART').length})
           </button>
           <button
             onClick={() => setTab('logs')}
@@ -363,7 +369,10 @@ export default function WorkOrderDetailPage() {
           </button>
         </div>
 
-        {tab === 'items' && (
+        {(tab === 'labor' || tab === 'parts') && (() => {
+          const filterType = tab === 'labor' ? 'LABOR' : 'PART';
+          const filtered = wo.items.filter((i) => i.type === filterType);
+          return (
           <div className="mt-4">
             <div className="mb-3 flex justify-end">
               <button
@@ -374,14 +383,15 @@ export default function WorkOrderDetailPage() {
               </button>
             </div>
 
-            {wo.items.length === 0 ? (
-              <div className="py-8 text-center text-sm text-gray-500">Нет позиций</div>
+            {filtered.length === 0 ? (
+              <div className="py-8 text-center text-sm text-gray-500">
+                {tab === 'labor' ? 'Нет работ' : 'Нет материалов'}
+              </div>
             ) : (
               <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Тип</th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Описание</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Кол-во</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Цена</th>
@@ -390,15 +400,8 @@ export default function WorkOrderDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {wo.items.map((item) => (
+                    {filtered.map((item) => (
                       <tr key={item.id} className="hover:bg-gray-50">
-                        <td className="whitespace-nowrap px-4 py-3">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            item.type === 'LABOR' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
-                          }`}>
-                            {item.type === 'LABOR' ? 'Работа' : 'Запчасть'}
-                          </span>
-                        </td>
                         <td className="px-4 py-3 text-sm text-gray-900">
                           <span>{item.description}</span>
                           {item.recommended && (
@@ -443,7 +446,8 @@ export default function WorkOrderDetailPage() {
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {tab === 'logs' && (
           <WorkLogsTab
