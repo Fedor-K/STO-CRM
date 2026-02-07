@@ -56,6 +56,19 @@ const workOrderInclude = {
           mechanic: { select: { id: true, firstName: true, lastName: true } },
         },
       },
+      part: {
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          manufacturer: true,
+          unit: true,
+          currentStock: true,
+          warehouseStock: {
+            include: { warehouse: { select: { id: true, name: true } } },
+          },
+        },
+      },
     },
   },
   workLogs: {

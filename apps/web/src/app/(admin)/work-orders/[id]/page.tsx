@@ -18,6 +18,12 @@ interface ItemMechanicEntry {
   mechanic: { id: string; firstName: string; lastName: string };
 }
 
+interface WarehouseStockEntry {
+  quantity: number;
+  reserved: number;
+  warehouse: { id: string; name: string };
+}
+
 interface WorkOrderItem {
   id: string;
   type: 'LABOR' | 'PART';
@@ -31,6 +37,15 @@ interface WorkOrderItem {
   recommended: boolean;
   approvedByClient: boolean | null;
   mechanics: ItemMechanicEntry[];
+  part?: {
+    id: string;
+    name: string;
+    sku: string | null;
+    manufacturer: string | null;
+    unit: string;
+    currentStock: number;
+    warehouseStock: WarehouseStockEntry[];
+  } | null;
 }
 
 interface WorkLogEntry {
@@ -419,13 +434,17 @@ export default function WorkOrderDetailPage() {
                 {tab === 'labor' ? 'Нет работ' : 'Нет материалов'}
               </div>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Описание</th>
                       {filterType === 'LABOR' && <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Исполнитель</th>}
+                      {filterType === 'PART' && <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Производ.</th>}
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Кол-во</th>
+                      {filterType === 'PART' && <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Остаток</th>}
+                      {filterType === 'PART' && <th className="px-3 py-3 text-right text-xs font-medium uppercase text-gray-500">Резерв</th>}
+                      {filterType === 'PART' && <th className="px-3 py-3 text-left text-xs font-medium uppercase text-gray-500">Склад</th>}
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Цена</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Сумма</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">НДС</th>
@@ -465,7 +484,35 @@ export default function WorkOrderDetailPage() {
                             />
                           </td>
                         )}
+                        {filterType === 'PART' && (
+                          <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-600">
+                            {item.part?.manufacturer || '—'}
+                          </td>
+                        )}
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{Number(item.quantity)}</td>
+                        {filterType === 'PART' && (() => {
+                          const stocks = item.part?.warehouseStock || [];
+                          const totalQty = stocks.reduce((s: number, ws: any) => s + ws.quantity, 0);
+                          const totalRes = stocks.reduce((s: number, ws: any) => s + ws.reserved, 0);
+                          const available = totalQty - totalRes;
+                          const needed = Number(item.quantity);
+                          const stockColor = available >= needed ? 'text-green-600' : available > 0 ? 'text-orange-500' : 'text-red-500';
+                          const whTooltip = stocks.filter((ws: any) => ws.quantity > 0).map((ws: any) => `${ws.warehouse.name}: ${ws.quantity} (рез. ${ws.reserved})`).join('\n');
+                          const primaryWh = stocks.filter((ws: any) => ws.quantity > 0).sort((a: any, b: any) => b.quantity - a.quantity)[0];
+                          return (
+                            <>
+                              <td className={`whitespace-nowrap px-3 py-3 text-right text-sm font-medium ${stockColor}`} title={whTooltip}>
+                                {totalQty}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3 text-right text-sm text-gray-500">
+                                {totalRes > 0 ? totalRes : '—'}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-500" title={whTooltip}>
+                                {primaryWh ? primaryWh.warehouse.name : '—'}
+                              </td>
+                            </>
+                          );
+                        })()}
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{formatMoney(item.unitPrice)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">{formatMoney(item.totalPrice)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">
