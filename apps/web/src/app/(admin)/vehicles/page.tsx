@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, Fragment } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/lib/api';
 
@@ -26,10 +27,44 @@ interface Vehicle {
   createdAt: string;
 }
 
+interface WorkOrderSummary {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalAmount: number | string;
+  createdAt: string;
+}
+
 interface PaginatedResponse {
   data: Vehicle[];
   meta: { total: number; page: number; limit: number; totalPages: number };
 }
+
+const STATUS_LABELS: Record<string, string> = {
+  NEW: 'Новый',
+  DIAGNOSED: 'Диагностика',
+  APPROVED: 'Согласован',
+  IN_PROGRESS: 'В работе',
+  PAUSED: 'Пауза',
+  COMPLETED: 'Выполнен',
+  INVOICED: 'Счёт выставлен',
+  PAID: 'Оплачен',
+  CLOSED: 'Закрыт',
+  CANCELLED: 'Отменён',
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  NEW: 'bg-gray-200 text-gray-700',
+  DIAGNOSED: 'bg-blue-100 text-blue-700',
+  APPROVED: 'bg-indigo-100 text-indigo-700',
+  IN_PROGRESS: 'bg-yellow-100 text-yellow-700',
+  PAUSED: 'bg-orange-100 text-orange-700',
+  COMPLETED: 'bg-green-100 text-green-700',
+  INVOICED: 'bg-cyan-100 text-cyan-700',
+  PAID: 'bg-emerald-100 text-emerald-700',
+  CLOSED: 'bg-gray-100 text-gray-600',
+  CANCELLED: 'bg-red-100 text-red-700',
+};
 
 export default function VehiclesPage() {
   const queryClient = useQueryClient();
@@ -180,6 +215,8 @@ export default function VehiclesPage() {
                                 </div>
                               </div>
                             </div>
+                            {/* Work order history */}
+                            <VehicleWorkOrders vehicleId={v.id} />
                           </td>
                         </tr>
                       )}
@@ -417,6 +454,63 @@ function VehicleModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function VehicleWorkOrders({ vehicleId }: { vehicleId: string }) {
+  const { data, isLoading } = useQuery<{ workOrders: WorkOrderSummary[] }>({
+    queryKey: ['vehicle-detail', vehicleId],
+    queryFn: () => apiFetch(`/vehicles/${vehicleId}`),
+  });
+
+  const workOrders = data?.workOrders;
+
+  if (isLoading) {
+    return <div className="mt-4 text-sm text-gray-500">Загрузка истории...</div>;
+  }
+
+  if (!workOrders || workOrders.length === 0) {
+    return <div className="mt-4 text-sm text-gray-400">Нет заказ-нарядов</div>;
+  }
+
+  return (
+    <div className="mt-4">
+      <h4 className="text-xs font-semibold uppercase text-gray-500">История заказ-нарядов (последние 10)</h4>
+      <div className="mt-2 overflow-hidden rounded-lg border border-gray-100 bg-white">
+        <table className="min-w-full divide-y divide-gray-100">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Номер</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Дата</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Статус</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Сумма</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {workOrders.map((wo) => (
+              <tr key={wo.id} className="hover:bg-gray-50">
+                <td className="px-3 py-2 text-sm">
+                  <Link href={`/work-orders/${wo.id}`} className="font-medium text-primary-600 hover:text-primary-800">
+                    {wo.orderNumber}
+                  </Link>
+                </td>
+                <td className="px-3 py-2 text-sm text-gray-600">
+                  {new Date(wo.createdAt).toLocaleDateString('ru-RU')}
+                </td>
+                <td className="px-3 py-2">
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[wo.status] || 'bg-gray-100'}`}>
+                    {STATUS_LABELS[wo.status] || wo.status}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-right text-sm font-medium text-gray-900">
+                  {Number(wo.totalAmount).toLocaleString('ru-RU')} ₽
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
