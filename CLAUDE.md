@@ -78,7 +78,7 @@ docker/            — Dockerfile'ы и docker-compose
 ### Заказ-наряды
 - **Статусы:** NEW → DIAGNOSED → APPROVED → IN_PROGRESS → PAUSED → COMPLETED → INVOICED → PAID → CLOSED (+ CANCELLED)
 - **Механик обязателен** для любого перехода вперёд (кроме CANCELLED) из статусов NEW–PAUSED. Валидация и на бэкенде, и на фронтенде (кнопка `disabled`)
-- **Механик на уровне работы:** каждая LABOR-позиция может иметь своего мастера (`work_order_items.mechanicId`). По умолчанию подставляется мастер заказ-наряда
+- **Исполнители по позициям:** каждая LABOR-позиция имеет своих исполнителей через `work_order_item_mechanics` (связь many-to-many с `users`). Колонка «Исполнитель» в таблице работ показывает бейджи с ФИО и % участия. Инлайн-редактирование: добавить (дропдаун с поиском), изменить %, удалить. Для CLOSED/CANCELLED — только чтение. Поле «Механик» убрано из карточки ЗН (mechanicId остаётся в БД)
 - **Рекомендованные работы:** флаг `recommended` + `approvedByClient` (null=ожидание, true=одобрено, false=отклонено). Неодобренные НЕ входят в `totalAmount`
 - **Пробег:** отображается в карточке автомобиля, редактируется на всех этапах
 
@@ -154,10 +154,11 @@ ssh root@178.72.139.156 "/opt/STO-CRM/scripts/restore.sh daily/stocrm_2026-02-05
 
 ### Сервер 1С
 - **IP:** 185.222.161.252, Windows Server
-- **SSH:** `Administrator@185.222.161.252`
-- **1С:** база `D:\Base`, пользователь `Администратор`
-- **API Gateway:** FastAPI + COM-коннектор, `C:\temp\api_gateway.py`, порт 8080
-- **Запуск:** scheduled task `API-Gateway` (пользователь `VDSKA\22Linia1`)
+- **SSH:** `22Linia1@185.222.161.252` (порт 22, пароль `RhK312Sz1$`), доступ через prod-сервер: `ssh root@178.72.139.156 "sshpass -p 'RhK312Sz1\$' ssh -o StrictHostKeyChecking=no 22Linia1@185.222.161.252 '...'"`
+- **1С:** база `D:\Base`, пользователь `Администратор`, пароль `12345678`
+- **API Gateway:** FastAPI + COM-коннектор, `C:\temp\api_gateway.py`, порт 8080, версия 3.0
+- **Запуск:** `schtasks /Create /TN "APIGateway" /TR "C:\Python311-32\python.exe C:\temp\api_gateway.py" /SC ONSTART /RU SYSTEM /F && schtasks /Run /TN "APIGateway"`
+- **Важно:** в `C:\temp\` не должно быть файла `org.py` (конфликтует с Python import)
 - **Python:** `C:\Python311-32\python.exe` (32-bit для COM)
 
 ### Импортированные данные (из 1С → STO-CRM)
@@ -166,6 +167,7 @@ ssh root@178.72.139.156 "/opt/STO-CRM/scripts/restore.sh daily/stocrm_2026-02-05
 - **Заказ-наряды:** 24,175 (из 25,201 в 1С — 1,026 пропущены из-за отсутствия привязки к авто)
 - **Сотрудники:** 37 (MECHANIC-роль)
 - **Механики на ЗН:** 21,222 из 24,175 привязаны к мастеру
+- **Исполнители по работам:** 55,619 записей в `work_order_item_mechanics` (импорт из 1С `Исполнители` + fallback на мастера ЗН для работ без назначенных)
 - **Услуги:** импортированы из 1С + нормочасы
 
 ### Верификация данных (проведена 2026-02-06)
