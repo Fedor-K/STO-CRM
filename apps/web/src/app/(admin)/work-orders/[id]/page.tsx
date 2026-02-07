@@ -170,6 +170,7 @@ export default function WorkOrderDetailPage() {
   const laborItems = wo.items.filter((i) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true));
   const allLogsCompleted = wo.workLogs.length >= laborItems.length;
   const needsLogsForCompleted = wo.status === 'IN_PROGRESS' && !allLogsCompleted;
+  const isLocked = wo.status === 'CLOSED' || wo.status === 'CANCELLED';
 
   return (
     <div>
@@ -277,12 +278,14 @@ export default function WorkOrderDetailPage() {
               currentValue={wo.mechanic ? `${wo.mechanic.firstName} ${wo.mechanic.lastName}` : null}
               fetchUrl="/users?limit=100&sort=firstName&order=asc&role=MECHANIC"
               onAssign={(userId) => updateFieldMutation.mutate({ mechanicId: userId || null })}
+              disabled={isLocked}
             />
             <AssignField
               label="Приёмщик"
               currentValue={wo.advisor ? `${wo.advisor.firstName} ${wo.advisor.lastName}` : null}
               fetchUrl="/users?limit=100&sort=firstName&order=asc&role=RECEPTIONIST"
               onAssign={(userId) => updateFieldMutation.mutate({ advisorId: userId || null })}
+              disabled={isLocked}
             />
 {wo.mileageAtIntake != null && (
               <div className="flex justify-between">
@@ -374,6 +377,7 @@ export default function WorkOrderDetailPage() {
           const filtered = wo.items.filter((i) => i.type === filterType);
           return (
           <div className="mt-4">
+            {!isLocked && (
             <div className="mb-3 flex justify-end">
               <button
                 onClick={() => setShowAddItem(true)}
@@ -382,6 +386,7 @@ export default function WorkOrderDetailPage() {
                 Добавить позицию
               </button>
             </div>
+            )}
 
             {filtered.length === 0 ? (
               <div className="py-8 text-center text-sm text-gray-500">
@@ -396,7 +401,7 @@ export default function WorkOrderDetailPage() {
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Кол-во</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Цена</th>
                       <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Сумма</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Действия</th>
+                      {!isLocked && <th className="px-4 py-3 text-right text-xs font-medium uppercase text-gray-500">Действия</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -423,22 +428,24 @@ export default function WorkOrderDetailPage() {
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{Number(item.quantity)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm text-gray-600">{formatMoney(item.unitPrice)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm font-medium text-gray-900">{formatMoney(item.totalPrice)}</td>
+                        {!isLocked && (
                         <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
-                          <button
-                            onClick={() => setEditItem(item)}
-                            className="text-primary-600 hover:text-primary-800"
-                          >
-                            Изменить
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (confirm('Удалить позицию?')) deleteItemMutation.mutate(item.id);
-                            }}
-                            className="ml-3 text-red-600 hover:text-red-800"
-                          >
-                            Удалить
-                          </button>
+                              <button
+                                onClick={() => setEditItem(item)}
+                                className="text-primary-600 hover:text-primary-800"
+                              >
+                                Изменить
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm('Удалить позицию?')) deleteItemMutation.mutate(item.id);
+                                }}
+                                className="ml-3 text-red-600 hover:text-red-800"
+                              >
+                                Удалить
+                              </button>
                         </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -880,12 +887,14 @@ function AssignField({
   fetchUrl,
   fieldType = 'user',
   onAssign,
+  disabled = false,
 }: {
   label: string;
   currentValue: string | null;
   fetchUrl: string;
   fieldType?: 'user' | 'bay';
   onAssign: (id: string) => void;
+  disabled?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const { data } = useQuery<{ data: any[] }>({
@@ -893,6 +902,15 @@ function AssignField({
     queryFn: () => apiFetch(fetchUrl),
     enabled: editing,
   });
+
+  if (disabled) {
+    return (
+      <div className="flex items-center justify-between">
+        <span className="text-gray-500">{label}</span>
+        <span className="text-gray-900">{currentValue || '—'}</span>
+      </div>
+    );
+  }
 
   if (editing) {
     return (
