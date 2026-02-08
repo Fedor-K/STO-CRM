@@ -1088,13 +1088,8 @@ function AppointmentDetailModal({
       const day = String(d.getDate()).padStart(2, '0');
       const h = String(d.getHours()).padStart(2, '0');
       const min = String(d.getMinutes()).padStart(2, '0');
-      // Only pre-fill if it's not the auto-generated "now" date from creation
-      const created = new Date(appointment.createdAt);
-      const diffMs = Math.abs(d.getTime() - created.getTime());
-      if (diffMs > 120000) {
-        setArrivalDate(`${y}-${m}-${day}`);
-        setArrivalTime(`${h}:${min}`);
-      }
+      setArrivalDate(`${y}-${m}-${day}`);
+      setArrivalTime(`${h}:${min}`);
     }
     setInitialized(true);
   }

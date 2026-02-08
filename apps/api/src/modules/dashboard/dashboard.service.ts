@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma.service';
 
 const appointmentFunnelInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true } },
+  advisor: { select: { id: true, firstName: true, lastName: true } },
   vehicle: { select: { id: true, make: true, model: true, licensePlate: true, mileage: true } },
 };
 
