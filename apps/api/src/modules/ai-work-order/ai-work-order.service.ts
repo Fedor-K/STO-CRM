@@ -62,12 +62,19 @@ export class AiWorkOrderService {
     }
 
     // 1. Extract keywords from description for smart catalog filtering
+    const stopWords = new Set([
+      'это', 'что', 'как', 'для', 'при', 'его', 'она', 'они', 'был', 'была', 'будет',
+      'нужно', 'нужна', 'просит', 'говорит', 'также', 'приехал', 'приехала', 'госномер',
+      'номер', 'год', 'года', 'замена', 'замену', 'заменить', 'поменять', 'менять',
+      'ремонт', 'сделать', 'проверить', 'нужен', 'нужна', 'нужны', 'очень', 'еще',
+      'который', 'которая', 'которые', 'автомобиль', 'машина', 'машину', 'авто',
+    ]);
     const keywords = description
       .toLowerCase()
       .replace(/[^а-яёa-z0-9\s]/g, ' ')
       .split(/\s+/)
       .filter((w) => w.length >= 3)
-      .filter((w) => !['это', 'что', 'как', 'для', 'при', 'его', 'она', 'они', 'был', 'была', 'будет', 'нужно', 'просит', 'говорит', 'также', 'приехал', 'приехала', 'госномер', 'номер', 'год', 'года'].includes(w));
+      .filter((w) => !stopWords.has(w));
     const uniqueKeywords = [...new Set(keywords)];
 
     // 2. Load catalogs in parallel — services & parts filtered by keywords
@@ -86,16 +93,15 @@ export class AiWorkOrderService {
         orderBy: { name: 'asc' },
         take: 150,
       }),
-      // Top common services as fallback (диагностика, ТО, etc.)
+      // Top common services as fallback (диагностика, ТО)
       this.prisma.service.findMany({
         where: { tenantId, isActive: true, OR: [
           { name: { contains: 'диагностик', mode: 'insensitive' } },
-          { name: { contains: 'замена', mode: 'insensitive' } },
-          { name: { contains: 'ремонт', mode: 'insensitive' } },
+          { name: { contains: 'ТО ', mode: 'insensitive' } },
         ]},
         select: { id: true, name: true, price: true, normHours: true },
         orderBy: { name: 'asc' },
-        take: 100,
+        take: 30,
       }),
       // Parts matching description keywords
       this.prisma.part.findMany({
