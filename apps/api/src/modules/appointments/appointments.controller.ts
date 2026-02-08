@@ -2,7 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestj
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { IsString, IsOptional, IsEnum, IsUUID, IsArray } from 'class-validator';
 import { AppointmentsService } from './appointments.service';
-import { Roles, CurrentTenant } from '../../common/decorators';
+import { Roles, CurrentTenant, CurrentUser, type CurrentUserData } from '../../common/decorators';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { AppointmentStatus } from '@prisma/client';
 
@@ -153,10 +153,11 @@ export class AppointmentsController {
   @ApiOperation({ summary: 'Изменить статус записи' })
   updateStatus(
     @CurrentTenant() tenantId: string,
+    @CurrentUser() user: CurrentUserData,
     @Param('id') id: string,
     @Body() dto: UpdateStatusDto,
   ) {
-    return this.appointmentsService.updateStatus(tenantId, id, dto.status);
+    return this.appointmentsService.updateStatus(tenantId, id, dto.status, user.id);
   }
 
   @Delete(':id')
