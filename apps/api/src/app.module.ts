@@ -13,6 +13,7 @@ import { WorkOrdersModule } from './modules/work-orders/work-orders.module';
 import { PartsModule } from './modules/parts/parts.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { AiWorkOrderModule } from './modules/ai-work-order/ai-work-order.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TenantScopeInterceptor } from './common/interceptors/tenant-scope.interceptor';
@@ -34,6 +35,7 @@ import { TenantScopeInterceptor } from './common/interceptors/tenant-scope.inter
     PartsModule,
     InventoryModule,
     DashboardModule,
+    AiWorkOrderModule,
   ],
   controllers: [AppController],
   providers: [

@@ -150,6 +150,7 @@ function sanitizePlate(val: string): string {
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [showAppointmentModal, setShowAppointmentModal] = useState(false);
+  const [showAiModal, setShowAiModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<{ id: string; column: string } | null>(null);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<string | null>(null);
 
@@ -203,12 +204,20 @@ export default function DashboardPage() {
       <div className="mt-8">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Воронка клиентов</h2>
-          <button
-            onClick={() => setShowAppointmentModal(true)}
-            className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
-          >
-            + Новая заявка
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAiModal(true)}
+              className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
+            >
+              ✦ Создать с ИИ
+            </button>
+            <button
+              onClick={() => setShowAppointmentModal(true)}
+              className="rounded-lg bg-primary-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-primary-700"
+            >
+              + Новая заявка
+            </button>
+          </div>
         </div>
 
         {funnelLoading ? (
@@ -265,6 +274,16 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {showAiModal && (
+        <AiWorkOrderModal
+          onClose={() => setShowAiModal(false)}
+          onSuccess={() => {
+            setShowAiModal(false);
+            invalidateFunnel();
+          }}
+        />
+      )}
 
       {showAppointmentModal && (
         <CreateAppointmentModal
@@ -3365,6 +3384,350 @@ function SearchablePartSelect({
           Не найдено
         </div>
       )}
+    </div>
+  );
+}
+
+// --- AI Work Order Modal ---
+
+type AiModalStep = 'input' | 'parsing' | 'preview' | 'creating' | 'done';
+
+interface AiParseResult {
+  client: { existingId: string | null; firstName: string | null; lastName: string | null; phone: string | null; isNew: boolean };
+  vehicle: { existingId: string | null; make: string | null; model: string | null; year: number | null; licensePlate: string | null; vin: string | null; isNew: boolean };
+  clientComplaints: string;
+  suggestedServices: { serviceId: string; name: string; price: number; normHours: number }[];
+  suggestedParts: { partId: string; name: string; sellPrice: number; quantity: number; inStock: boolean }[];
+  suggestedMechanic: { mechanicId: string; firstName: string; lastName: string; activeOrdersCount: number } | null;
+}
+
+function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [step, setStep] = useState<AiModalStep>('input');
+  const [description, setDescription] = useState('');
+  const [error, setError] = useState('');
+  const [preview, setPreview] = useState<AiParseResult | null>(null);
+  const [createdOrderNumber, setCreatedOrderNumber] = useState('');
+  const [createdOrderId, setCreatedOrderId] = useState('');
+
+  // Editable fields for preview
+  const [editFirstName, setEditFirstName] = useState('');
+  const [editLastName, setEditLastName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editMake, setEditMake] = useState('');
+  const [editModel, setEditModel] = useState('');
+  const [editYear, setEditYear] = useState('');
+  const [editPlate, setEditPlate] = useState('');
+  const [editComplaints, setEditComplaints] = useState('');
+  const [selectedServices, setSelectedServices] = useState<boolean[]>([]);
+  const [selectedParts, setSelectedParts] = useState<boolean[]>([]);
+
+  async function handleParse() {
+    if (!description.trim()) return;
+    setError('');
+    setStep('parsing');
+    try {
+      const result = await apiFetch<AiParseResult>('/ai-work-order/parse', {
+        method: 'POST',
+        body: JSON.stringify({ description: description.trim() }),
+      });
+      setPreview(result);
+      // Init editable fields
+      setEditFirstName(result.client.firstName || '');
+      setEditLastName(result.client.lastName || '');
+      setEditPhone(result.client.phone || '');
+      setEditMake(result.vehicle.make || '');
+      setEditModel(result.vehicle.model || '');
+      setEditYear(result.vehicle.year ? String(result.vehicle.year) : '');
+      setEditPlate(result.vehicle.licensePlate || '');
+      setEditComplaints(result.clientComplaints || '');
+      setSelectedServices(result.suggestedServices.map(() => true));
+      setSelectedParts(result.suggestedParts.map(() => true));
+      setStep('preview');
+    } catch (err: any) {
+      setError(err.message || 'Ошибка анализа');
+      setStep('input');
+    }
+  }
+
+  async function handleCreate() {
+    if (!preview) return;
+    setError('');
+    setStep('creating');
+    try {
+      const services = preview.suggestedServices.filter((_, i) => selectedServices[i]);
+      const parts = preview.suggestedParts.filter((_, i) => selectedParts[i]);
+
+      const body: any = {
+        clientComplaints: editComplaints,
+        services: services.map((s) => ({ serviceId: s.serviceId, name: s.name, price: s.price, normHours: s.normHours })),
+        parts: parts.map((p) => ({ partId: p.partId, name: p.name, sellPrice: p.sellPrice, quantity: p.quantity })),
+      };
+
+      if (preview.client.existingId) {
+        body.existingClientId = preview.client.existingId;
+      } else {
+        body.newClient = { firstName: editFirstName, lastName: editLastName, phone: editPhone || undefined };
+      }
+
+      if (preview.vehicle.existingId) {
+        body.existingVehicleId = preview.vehicle.existingId;
+      } else {
+        body.newVehicle = {
+          make: sanitizeMakeModel(editMake),
+          model: sanitizeMakeModel(editModel),
+          year: editYear ? Number(editYear) : undefined,
+          licensePlate: sanitizePlate(editPlate) || undefined,
+        };
+      }
+
+      if (preview.suggestedMechanic) {
+        body.mechanicId = preview.suggestedMechanic.mechanicId;
+      }
+
+      const result = await apiFetch<any>('/ai-work-order/create', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      setCreatedOrderNumber(result.orderNumber);
+      setCreatedOrderId(result.id);
+      setStep('done');
+    } catch (err: any) {
+      setError(err.message || 'Ошибка создания');
+      setStep('preview');
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {step === 'input' && '✦ Создать заявку с ИИ'}
+            {step === 'parsing' && '✦ Анализ описания...'}
+            {step === 'preview' && '✦ Превью заказ-наряда'}
+            {step === 'creating' && '✦ Создание...'}
+            {step === 'done' && '✦ Заказ-наряд создан'}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+        </div>
+
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        )}
+
+        {/* Step: input */}
+        {step === 'input' && (
+          <div>
+            <p className="mb-3 text-sm text-gray-500">
+              Опишите ситуацию: кто приехал, на чём, с какой проблемой. ИИ подберёт услуги, запчасти и механика.
+            </p>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Например: Приехала Камри 2019 госномер А123БВ, стук в передней подвеске"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+              rows={4}
+              autoFocus
+            />
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={handleParse}
+                disabled={!description.trim()}
+                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50"
+              >
+                Анализировать
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: parsing */}
+        {step === 'parsing' && (
+          <div className="flex flex-col items-center py-12">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+            <p className="mt-4 text-sm text-gray-500">ИИ анализирует описание...</p>
+          </div>
+        )}
+
+        {/* Step: preview */}
+        {step === 'preview' && preview && (
+          <div className="space-y-4">
+            {/* Client */}
+            <div className="rounded-lg border border-gray-200 p-3">
+              <h3 className="mb-2 text-sm font-semibold text-gray-700">
+                Клиент {preview.client.isNew ? <span className="text-xs font-normal text-green-600">(новый)</span> : <span className="text-xs font-normal text-blue-600">(найден в базе)</span>}
+              </h3>
+              {preview.client.isNew ? (
+                <div className="grid grid-cols-3 gap-2">
+                  <input value={editLastName} onChange={(e) => setEditLastName(e.target.value)} placeholder="Фамилия" className="rounded border border-gray-300 px-2 py-1 text-sm" />
+                  <input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} placeholder="Имя" className="rounded border border-gray-300 px-2 py-1 text-sm" />
+                  <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="Телефон" className="rounded border border-gray-300 px-2 py-1 text-sm" />
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600">{preview.client.lastName} {preview.client.firstName} {preview.client.phone && `• ${preview.client.phone}`}</p>
+              )}
+            </div>
+
+            {/* Vehicle */}
+            <div className="rounded-lg border border-gray-200 p-3">
+              <h3 className="mb-2 text-sm font-semibold text-gray-700">
+                Автомобиль {preview.vehicle.isNew ? <span className="text-xs font-normal text-green-600">(новый)</span> : <span className="text-xs font-normal text-blue-600">(найден в базе)</span>}
+              </h3>
+              {preview.vehicle.isNew ? (
+                <div className="grid grid-cols-4 gap-2">
+                  <input value={editMake} onChange={(e) => setEditMake(e.target.value)} placeholder="Марка" className="rounded border border-gray-300 px-2 py-1 text-sm" />
+                  <input value={editModel} onChange={(e) => setEditModel(e.target.value)} placeholder="Модель" className="rounded border border-gray-300 px-2 py-1 text-sm" />
+                  <input value={editYear} onChange={(e) => setEditYear(e.target.value)} placeholder="Год" className="rounded border border-gray-300 px-2 py-1 text-sm" />
+                  <input value={editPlate} onChange={(e) => setEditPlate(e.target.value)} placeholder="Госномер" className="rounded border border-gray-300 px-2 py-1 text-sm" />
+                </div>
+              ) : (
+                <p className="text-sm text-gray-600">
+                  {preview.vehicle.make} {preview.vehicle.model} {preview.vehicle.year && `(${preview.vehicle.year})`} {preview.vehicle.licensePlate && `• ${preview.vehicle.licensePlate}`}
+                </p>
+              )}
+            </div>
+
+            {/* Complaints */}
+            <div className="rounded-lg border border-gray-200 p-3">
+              <h3 className="mb-2 text-sm font-semibold text-gray-700">Жалобы клиента</h3>
+              <textarea
+                value={editComplaints}
+                onChange={(e) => setEditComplaints(e.target.value)}
+                className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                rows={2}
+              />
+            </div>
+
+            {/* Services */}
+            {preview.suggestedServices.length > 0 && (
+              <div className="rounded-lg border border-gray-200 p-3">
+                <h3 className="mb-2 text-sm font-semibold text-gray-700">Услуги</h3>
+                <div className="space-y-1">
+                  {preview.suggestedServices.map((s, i) => (
+                    <label key={s.serviceId} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedServices[i] ?? true}
+                        onChange={(e) => {
+                          const next = [...selectedServices];
+                          next[i] = e.target.checked;
+                          setSelectedServices(next);
+                        }}
+                        className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                      />
+                      <span className="flex-1 truncate">{s.name}</span>
+                      <span className="whitespace-nowrap text-gray-500">{formatMoney(s.price)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Parts */}
+            {preview.suggestedParts.length > 0 && (
+              <div className="rounded-lg border border-gray-200 p-3">
+                <h3 className="mb-2 text-sm font-semibold text-gray-700">Запчасти</h3>
+                <div className="space-y-1">
+                  {preview.suggestedParts.map((p, i) => (
+                    <label key={p.partId} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={selectedParts[i] ?? true}
+                        onChange={(e) => {
+                          const next = [...selectedParts];
+                          next[i] = e.target.checked;
+                          setSelectedParts(next);
+                        }}
+                        className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                      />
+                      <span className="flex-1 truncate">{p.name} {p.quantity > 1 && `x${p.quantity}`}</span>
+                      <span className="whitespace-nowrap text-gray-500">{formatMoney(p.sellPrice)}</span>
+                      {!p.inStock && <span className="text-xs text-red-500">нет на складе</span>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Mechanic */}
+            {preview.suggestedMechanic && (
+              <div className="rounded-lg border border-gray-200 p-3">
+                <h3 className="mb-2 text-sm font-semibold text-gray-700">Механик</h3>
+                <p className="text-sm text-gray-600">
+                  {preview.suggestedMechanic.lastName} {preview.suggestedMechanic.firstName}
+                  <span className="ml-2 text-xs text-gray-400">активных ЗН: {preview.suggestedMechanic.activeOrdersCount}</span>
+                </p>
+              </div>
+            )}
+
+            {/* Total */}
+            {(() => {
+              const servicesTotal = preview.suggestedServices.filter((_, i) => selectedServices[i]).reduce((sum, s) => sum + s.price, 0);
+              const partsTotal = preview.suggestedParts.filter((_, i) => selectedParts[i]).reduce((sum, p) => sum + p.sellPrice * p.quantity, 0);
+              return (
+                <div className="rounded-lg bg-gray-50 p-3 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-500">Работы:</span><span>{formatMoney(servicesTotal)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Запчасти:</span><span>{formatMoney(partsTotal)}</span></div>
+                  <div className="mt-1 flex justify-between border-t pt-1 font-semibold"><span>Итого:</span><span>{formatMoney(servicesTotal + partsTotal)}</span></div>
+                </div>
+              );
+            })()}
+
+            <div className="flex justify-between">
+              <button
+                onClick={() => setStep('input')}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Назад
+              </button>
+              <button
+                onClick={handleCreate}
+                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+              >
+                Создать заказ-наряд
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step: creating */}
+        {step === 'creating' && (
+          <div className="flex flex-col items-center py-12">
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
+            <p className="mt-4 text-sm text-gray-500">Создаём заказ-наряд...</p>
+          </div>
+        )}
+
+        {/* Step: done */}
+        {step === 'done' && (
+          <div className="flex flex-col items-center py-8">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+              <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <p className="mt-4 text-lg font-semibold text-gray-900">Заказ-наряд {createdOrderNumber} создан</p>
+            <div className="mt-6 flex gap-3">
+              <Link
+                href={`/work-orders/${createdOrderId}`}
+                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
+              >
+                Открыть заказ-наряд
+              </Link>
+              <button
+                onClick={onSuccess}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
