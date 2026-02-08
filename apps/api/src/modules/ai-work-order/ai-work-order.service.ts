@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { PrismaService } from '../../database/prisma.service';
 import { WorkOrdersService } from '../work-orders/work-orders.service';
+import { AppointmentsService } from '../appointments/appointments.service';
 import { UsersService } from '../users/users.service';
 import { VehiclesService } from '../vehicles/vehicles.service';
 import { buildSystemPrompt } from './ai-prompt';
@@ -36,6 +37,7 @@ export class AiWorkOrderService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly workOrdersService: WorkOrdersService,
+    private readonly appointmentsService: AppointmentsService,
     private readonly usersService: UsersService,
     private readonly vehiclesService: VehiclesService,
   ) {
@@ -275,51 +277,45 @@ export class AiWorkOrderService {
       throw new BadRequestException('Не указан автомобиль');
     }
 
-    // 3. Create work order
-    const workOrder = await this.workOrdersService.create(
-      tenantId,
-      {
-        clientId,
-        vehicleId,
-        mechanicId: data.mechanicId,
-        clientComplaints: data.clientComplaints,
-      },
-      userId,
-    );
-
-    // 4. Add items
+    // 3. Build plannedItems for appointment
+    const plannedItems: any[] = [];
     for (const svc of data.services) {
-      await this.workOrdersService.addItem(
-        tenantId,
-        workOrder.id,
-        {
-          type: 'LABOR',
-          description: svc.name,
-          quantity: 1,
-          unitPrice: svc.price,
-          normHours: svc.normHours,
-          serviceId: svc.serviceId,
-        },
-        userId,
-      );
+      plannedItems.push({
+        type: 'LABOR',
+        description: svc.name,
+        quantity: 1,
+        unitPrice: svc.price,
+        normHours: svc.normHours,
+        serviceId: svc.serviceId,
+      });
     }
-
     for (const part of data.parts) {
-      await this.workOrdersService.addItem(
-        tenantId,
-        workOrder.id,
-        {
-          type: 'PART',
-          description: part.name,
-          quantity: part.quantity,
-          unitPrice: part.sellPrice,
-          partId: part.partId,
-        },
-        userId,
-      );
+      plannedItems.push({
+        type: 'PART',
+        description: part.name,
+        quantity: part.quantity,
+        unitPrice: part.sellPrice,
+        partId: part.partId,
+      });
     }
 
-    // 5. Return full work order
-    return this.workOrdersService.findById(tenantId, workOrder.id);
+    // 4. Create appointment (starts in "Обращение" column)
+    const now = new Date();
+    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+    const appointment = await this.appointmentsService.create(tenantId, {
+      clientId,
+      vehicleId,
+      scheduledStart: now.toISOString(),
+      scheduledEnd: oneHourLater.toISOString(),
+      notes: data.clientComplaints,
+      source: 'ai',
+    });
+
+    // 5. Update with plannedItems
+    if (plannedItems.length > 0) {
+      await this.appointmentsService.update(tenantId, appointment.id, { plannedItems });
+    }
+
+    return appointment;
   }
 }
