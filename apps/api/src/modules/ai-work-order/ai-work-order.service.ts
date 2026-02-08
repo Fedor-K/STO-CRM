@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { PrismaService } from '../../database/prisma.service';
 import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { UsersService } from '../users/users.service';
@@ -42,7 +43,15 @@ export class AiWorkOrderService {
     if (!apiKey) {
       this.logger.warn('ANTHROPIC_API_KEY не задан — AI-функции будут недоступны');
     }
-    this.anthropic = new Anthropic({ apiKey: apiKey || '' });
+    const proxyUrl = this.configService.get<string>('ANTHROPIC_PROXY_URL');
+    const baseURL = this.configService.get<string>('ANTHROPIC_BASE_URL');
+    const opts: ConstructorParameters<typeof Anthropic>[0] = { apiKey: apiKey || '' };
+    if (baseURL) opts.baseURL = baseURL;
+    if (proxyUrl) {
+      const agent = new ProxyAgent(proxyUrl);
+      opts.fetch = ((url: any, init: any) => undiciFetch(url, { ...init, dispatcher: agent })) as any;
+    }
+    this.anthropic = new Anthropic(opts);
   }
 
   async parse(tenantId: string, description: string) {
