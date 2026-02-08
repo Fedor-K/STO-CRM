@@ -61,19 +61,55 @@ export class AiWorkOrderService {
       throw new BadRequestException('AI-функция не настроена: ANTHROPIC_API_KEY не задан');
     }
 
-    // 1. Load catalogs in parallel
-    const [services, parts, mechanicsRaw] = await Promise.all([
+    // 1. Extract keywords from description for smart catalog filtering
+    const keywords = description
+      .toLowerCase()
+      .replace(/[^а-яёa-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 3)
+      .filter((w) => !['это', 'что', 'как', 'для', 'при', 'его', 'она', 'они', 'был', 'была', 'будет', 'нужно', 'просит', 'говорит', 'также', 'приехал', 'приехала', 'госномер', 'номер', 'год', 'года'].includes(w));
+    const uniqueKeywords = [...new Set(keywords)];
+
+    // 2. Load catalogs in parallel — services & parts filtered by keywords
+    const serviceKeywordFilter = uniqueKeywords.length > 0
+      ? { OR: uniqueKeywords.map((kw) => ({ name: { contains: kw, mode: 'insensitive' as const } })) }
+      : {};
+    const partKeywordFilter = uniqueKeywords.length > 0
+      ? { OR: uniqueKeywords.map((kw) => ({ name: { contains: kw, mode: 'insensitive' as const } })) }
+      : {};
+
+    const [relevantServices, topServices, relevantParts, topParts, mechanicsRaw] = await Promise.all([
+      // Services matching description keywords
       this.prisma.service.findMany({
-        where: { tenantId, isActive: true },
+        where: { tenantId, isActive: true, ...serviceKeywordFilter },
         select: { id: true, name: true, price: true, normHours: true },
         orderBy: { name: 'asc' },
-        take: 200,
+        take: 150,
       }),
+      // Top common services as fallback (диагностика, ТО, etc.)
+      this.prisma.service.findMany({
+        where: { tenantId, isActive: true, OR: [
+          { name: { contains: 'диагностик', mode: 'insensitive' } },
+          { name: { contains: 'замена', mode: 'insensitive' } },
+          { name: { contains: 'ремонт', mode: 'insensitive' } },
+        ]},
+        select: { id: true, name: true, price: true, normHours: true },
+        orderBy: { name: 'asc' },
+        take: 100,
+      }),
+      // Parts matching description keywords
       this.prisma.part.findMany({
-        where: { tenantId },
+        where: { tenantId, ...partKeywordFilter },
         select: { id: true, name: true, brand: true, sellPrice: true, currentStock: true },
         orderBy: { currentStock: 'desc' },
-        take: 300,
+        take: 200,
+      }),
+      // Top in-stock parts as fallback
+      this.prisma.part.findMany({
+        where: { tenantId, currentStock: { gt: 0 } },
+        select: { id: true, name: true, brand: true, sellPrice: true, currentStock: true },
+        orderBy: { currentStock: 'desc' },
+        take: 50,
       }),
       this.prisma.user.findMany({
         where: { tenantId, role: 'MECHANIC', isActive: true },
@@ -85,6 +121,15 @@ export class AiWorkOrderService {
         },
       }),
     ]);
+
+    // Merge and deduplicate
+    const serviceMap = new Map<string, typeof relevantServices[0]>();
+    for (const s of [...relevantServices, ...topServices]) serviceMap.set(s.id, s);
+    const services = [...serviceMap.values()].slice(0, 250);
+
+    const partMap = new Map<string, typeof relevantParts[0]>();
+    for (const p of [...relevantParts, ...topParts]) partMap.set(p.id, p);
+    const parts = [...partMap.values()].slice(0, 250);
 
     const mechanics = mechanicsRaw.map((m) => ({
       id: m.id,
