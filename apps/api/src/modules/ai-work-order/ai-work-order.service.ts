@@ -317,18 +317,10 @@ export class AiWorkOrderService {
       await this.appointmentsService.update(tenantId, appointment.id, { plannedItems });
     }
 
-    // 6. Advance appointment through funnel: PENDING → ESTIMATING → CONFIRMED
+    // 6. Advance to "Согласование" — ждём подтверждения клиента
     await this.appointmentsService.updateStatus(tenantId, appointment.id, 'ESTIMATING' as any);
-    await this.appointmentsService.updateStatus(tenantId, appointment.id, 'CONFIRMED' as any);
 
-    // 7. Create work order from appointment (status = DIAGNOSED, copies plannedItems, reserves stock)
-    const workOrder = await this.workOrdersService.createFromAppointment(tenantId, appointment.id, userId);
-
-    // 8. Assign mechanic to the work order
-    if (data.mechanicId && workOrder?.id) {
-      await this.workOrdersService.update(tenantId, workOrder.id, { mechanicId: data.mechanicId }, userId);
-    }
-
-    return workOrder;
+    // Return appointment with full data for frontend
+    return this.appointmentsService.findById(tenantId, appointment.id);
   }
 }
