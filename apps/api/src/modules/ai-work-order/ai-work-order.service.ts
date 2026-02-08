@@ -112,7 +112,12 @@ export class AiWorkOrderService {
 
     let parsed: ParsedAiResult;
     try {
-      parsed = JSON.parse(textBlock.text);
+      // Strip markdown code fences if present (```json ... ```)
+      let jsonText = textBlock.text.trim();
+      if (jsonText.startsWith('```')) {
+        jsonText = jsonText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+      }
+      parsed = JSON.parse(jsonText);
     } catch {
       this.logger.error(`AI вернул невалидный JSON: ${textBlock.text}`);
       throw new BadRequestException('AI вернул невалидный ответ, попробуйте ещё раз');
