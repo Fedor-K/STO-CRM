@@ -70,10 +70,10 @@ export class AiWorkOrderService {
         take: 200,
       }),
       this.prisma.part.findMany({
-        where: { tenantId, currentStock: { gt: 0 } },
+        where: { tenantId },
         select: { id: true, name: true, brand: true, sellPrice: true, currentStock: true },
         orderBy: { currentStock: 'desc' },
-        take: 100,
+        take: 300,
       }),
       this.prisma.user.findMany({
         where: { tenantId, role: 'MECHANIC', isActive: true },
