@@ -1259,7 +1259,7 @@ function AppointmentDetailModal({
   return (
     <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${column === 'estimating' ? 'max-w-2xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
+      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${column === 'estimating' || (column === 'scheduled' && plannedItems.length > 0) ? 'max-w-2xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">
             {column === 'appeal' ? 'Обращение' : column === 'estimating' ? 'Согласование' : 'Запись'}
@@ -1349,8 +1349,8 @@ function AppointmentDetailModal({
               </div>
             )}
 
-            {/* Planned items — only on estimating step */}
-            {column === 'estimating' && (
+            {/* Planned items — estimating (editable) and scheduled (read-only) */}
+            {(column === 'estimating' || (column === 'scheduled' && plannedItems.length > 0)) && (
               <div className="rounded-lg border border-gray-200">
                 <div className="flex items-center justify-between px-4 py-3">
                   <span className="text-sm font-semibold text-gray-700">
@@ -1390,7 +1390,7 @@ function AppointmentDetailModal({
                                 <th className="pb-1 font-medium text-right w-16">Норма</th>
                                 <th className="pb-1 font-medium text-right w-20">Всего</th>
                                 <th className="pb-1 font-medium text-right">в т.ч. НДС</th>
-                                <th className="pb-1 w-6"></th>
+                                {column === 'estimating' && <th className="pb-1 w-6"></th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -1400,9 +1400,11 @@ function AppointmentDetailModal({
                                   <td className="py-1.5 text-right text-gray-600">{item.normHours ?? item.quantity}</td>
                                   <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
                                   <td className="py-1.5 text-right text-gray-400">{formatVat(item.unitPrice * item.quantity)}</td>
-                                  <td className="py-1.5 text-right">
-                                    <button onClick={() => handleRemovePlannedItem(idx)} className="text-red-400 hover:text-red-600">&times;</button>
-                                  </td>
+                                  {column === 'estimating' && (
+                                    <td className="py-1.5 text-right">
+                                      <button onClick={() => handleRemovePlannedItem(idx)} className="text-red-400 hover:text-red-600">&times;</button>
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                             </tbody>
@@ -1410,6 +1412,7 @@ function AppointmentDetailModal({
                         ) : (
                           <p className="py-3 text-center text-xs text-gray-400">Нет работ</p>
                         )}
+                        {column === 'estimating' && (
                         <div className="mt-2">
                           {showAddPlanned && plannedTab === 'LABOR' ? (
                             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
@@ -1438,6 +1441,7 @@ function AppointmentDetailModal({
                             <button type="button" onClick={() => { setShowAddPlanned(true); setPlannedTab('LABOR'); }} className="text-xs font-medium text-primary-600 hover:text-primary-700">+ Добавить работу</button>
                           )}
                         </div>
+                        )}
                       </>
                     ) : (
                       <>
@@ -1450,7 +1454,7 @@ function AppointmentDetailModal({
                                 <th className="pb-1 font-medium text-right w-16">Остаток</th>
                                 <th className="pb-1 font-medium text-right w-20">Всего</th>
                                 <th className="pb-1 font-medium text-right">в т.ч. НДС</th>
-                                <th className="pb-1 w-6"></th>
+                                {column === 'estimating' && <th className="pb-1 w-6"></th>}
                               </tr>
                             </thead>
                             <tbody>
@@ -1467,9 +1471,11 @@ function AppointmentDetailModal({
                                   </td>
                                   <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
                                   <td className="py-1.5 text-right text-gray-400">{formatVat(item.unitPrice * item.quantity)}</td>
-                                  <td className="py-1.5 text-right">
-                                    <button onClick={() => handleRemovePlannedItem(idx)} className="text-red-400 hover:text-red-600">&times;</button>
-                                  </td>
+                                  {column === 'estimating' && (
+                                    <td className="py-1.5 text-right">
+                                      <button onClick={() => handleRemovePlannedItem(idx)} className="text-red-400 hover:text-red-600">&times;</button>
+                                    </td>
+                                  )}
                                 </tr>
                                 );
                               })}
@@ -1478,6 +1484,7 @@ function AppointmentDetailModal({
                         ) : (
                           <p className="py-3 text-center text-xs text-gray-400">Нет материалов</p>
                         )}
+                        {column === 'estimating' && (
                         <div className="mt-2">
                           {showAddPlanned && plannedTab === 'PART' ? (
                             <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 space-y-2">
@@ -1500,6 +1507,7 @@ function AppointmentDetailModal({
                             <button type="button" onClick={() => { setShowAddPlanned(true); setPlannedTab('PART'); }} className="text-xs font-medium text-primary-600 hover:text-primary-700">+ Добавить материал</button>
                           )}
                         </div>
+                        )}
                       </>
                     )}
                   </div>
