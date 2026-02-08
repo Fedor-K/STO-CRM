@@ -299,12 +299,13 @@ export class AiWorkOrderService {
       });
     }
 
-    // 4. Create appointment (starts in "Обращение" column)
+    // 4. Create appointment with advisor = current user
     const now = new Date();
     const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
     const appointment = await this.appointmentsService.create(tenantId, {
       clientId,
       vehicleId,
+      advisorId: userId,
       scheduledStart: now.toISOString(),
       scheduledEnd: oneHourLater.toISOString(),
       notes: data.clientComplaints,
@@ -316,6 +317,18 @@ export class AiWorkOrderService {
       await this.appointmentsService.update(tenantId, appointment.id, { plannedItems });
     }
 
-    return appointment;
+    // 6. Advance appointment through funnel: PENDING → ESTIMATING → CONFIRMED
+    await this.appointmentsService.updateStatus(tenantId, appointment.id, 'ESTIMATING' as any);
+    await this.appointmentsService.updateStatus(tenantId, appointment.id, 'CONFIRMED' as any);
+
+    // 7. Create work order from appointment (status = DIAGNOSED, copies plannedItems, reserves stock)
+    const workOrder = await this.workOrdersService.createFromAppointment(tenantId, appointment.id, userId);
+
+    // 8. Assign mechanic to the work order
+    if (data.mechanicId && workOrder?.id) {
+      await this.workOrdersService.update(tenantId, workOrder.id, { mechanicId: data.mechanicId }, userId);
+    }
+
+    return workOrder;
   }
 }

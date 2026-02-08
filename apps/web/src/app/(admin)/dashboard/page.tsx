@@ -3407,6 +3407,7 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<AiParseResult | null>(null);
   const [createdOrderId, setCreatedOrderId] = useState('');
+  const [createdOrderNumber, setCreatedOrderNumber] = useState('');
 
   // Editable fields for preview
   const [editFirstName, setEditFirstName] = useState('');
@@ -3488,6 +3489,7 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
         body: JSON.stringify(body),
       });
       setCreatedOrderId(result.id);
+      setCreatedOrderNumber(result.orderNumber || '');
       setStep('done');
     } catch (err: any) {
       setError(err.message || 'Ошибка создания');
@@ -3507,8 +3509,8 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
             {step === 'input' && '✦ Создать заявку с ИИ'}
             {step === 'parsing' && '✦ Анализ описания...'}
             {step === 'preview' && '✦ Превью заказ-наряда'}
-            {step === 'creating' && '✦ Создание заявки...'}
-            {step === 'done' && '✦ Заявка создана'}
+            {step === 'creating' && '✦ Создание заказ-наряда...'}
+            {step === 'done' && '✦ Заказ-наряд создан'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
         </div>
@@ -3686,7 +3688,7 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                 onClick={handleCreate}
                 className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
               >
-                Создать заявку
+                Создать заказ-наряд
               </button>
             </div>
           </div>
@@ -3696,7 +3698,7 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
         {step === 'creating' && (
           <div className="flex flex-col items-center py-12">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-violet-200 border-t-violet-600" />
-            <p className="mt-4 text-sm text-gray-500">Создаём заявку...</p>
+            <p className="mt-4 text-sm text-gray-500">Создаём заказ-наряд...</p>
           </div>
         )}
 
@@ -3708,9 +3710,21 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <p className="mt-4 text-lg font-semibold text-gray-900">Заявка создана</p>
-            <p className="mt-1 text-sm text-gray-500">Карточка появилась в колонке «Обращение»</p>
-            <div className="mt-6">
+            <p className="mt-4 text-lg font-semibold text-gray-900">
+              Заказ-наряд {createdOrderNumber || ''} создан
+            </p>
+            <p className="mt-1 text-sm text-gray-500">
+              Клиент, авто, работы, запчасти и механик заполнены автоматически
+            </p>
+            <div className="mt-6 flex items-center gap-3">
+              {createdOrderId && (
+                <a
+                  href={`/work-orders/${createdOrderId}`}
+                  className="rounded-lg border border-violet-600 px-4 py-2 text-sm font-medium text-violet-600 hover:bg-violet-50"
+                >
+                  Открыть ЗН
+                </a>
+              )}
               <button
                 onClick={onSuccess}
                 className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-700"
