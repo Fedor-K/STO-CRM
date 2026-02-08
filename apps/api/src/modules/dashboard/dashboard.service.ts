@@ -81,6 +81,7 @@ export class DashboardService {
     const [
       pendingAppointments,
       estimatingAppointments,
+      confirmedAppointments,
       diagnosedOrders,
       approvedOrders,
       inProgressOrders,
@@ -98,6 +99,13 @@ export class DashboardService {
       // Согласование — записи со статусом ESTIMATING
       this.prisma.appointment.findMany({
         where: { tenantId, status: 'ESTIMATING' },
+        include: appointmentFunnelInclude,
+        orderBy: { scheduledStart: 'asc' },
+      }),
+
+      // Записан — записи со статусом CONFIRMED
+      this.prisma.appointment.findMany({
+        where: { tenantId, status: 'CONFIRMED' },
         include: appointmentFunnelInclude,
         orderBy: { scheduledStart: 'asc' },
       }),
@@ -150,6 +158,7 @@ export class DashboardService {
     return {
       appeal: pendingAppointments,
       estimating: estimatingAppointments,
+      scheduled: confirmedAppointments,
       diagnosis: diagnosedOrders,
       approval: approvedOrders,
       inProgress: inProgressOrders,
@@ -158,6 +167,7 @@ export class DashboardService {
       cancelledByStage: {
         appeal: cancelledAppointments.filter((a: any) => a.cancelledFrom === 'PENDING' || (!a.cancelledFrom)),
         estimating: cancelledAppointments.filter((a: any) => a.cancelledFrom === 'ESTIMATING'),
+        scheduled: cancelledAppointments.filter((a: any) => a.cancelledFrom === 'CONFIRMED'),
       },
     };
   }
