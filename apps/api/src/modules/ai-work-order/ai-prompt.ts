@@ -3,61 +3,30 @@ export function buildSystemPrompt(
   parts: { id: string; name: string; brand: string | null; sellPrice: number; currentStock: number }[],
   mechanics: { id: string; firstName: string; lastName: string; activeOrdersCount: number }[],
 ): string {
-  const servicesCatalog = services
-    .map((s) => `- id:${s.id} | ${s.name} | ${s.price}р | ${s.normHours ?? '?'}нч`)
-    .join('\n');
+  const svcLines = services.map((s) => `${s.id}|${s.name}|${s.price}|${s.normHours ?? ''}`).join('\n');
+  const partLines = parts.map((p) => `${p.id}|${p.name}|${p.sellPrice}|${p.currentStock}`).join('\n');
+  const mechLines = mechanics.map((m) => `${m.id}|${m.lastName} ${m.firstName}|${m.activeOrdersCount}`).join('\n');
 
-  const partsCatalog = parts
-    .map((p) => `- id:${p.id} | ${p.name} | ${p.brand || '-'} | ${p.sellPrice}р | остаток:${p.currentStock}`)
-    .join('\n');
-
-  const mechanicsList = mechanics
-    .map((m) => `- id:${m.id} | ${m.lastName} ${m.firstName} | активных ЗН: ${m.activeOrdersCount}`)
-    .join('\n');
-
-  return `Ты — AI-ассистент мастера-приёмщика автосервиса. Твоя задача — разобрать текстовое описание ситуации от приёмщика и извлечь структурированную информацию для создания заказ-наряда.
+  return `Ты — AI-ассистент мастера-приёмщика автосервиса. Извлеки из текста информацию для заказ-наряда.
 
 ПРАВИЛА:
-1. Извлеки данные клиента (имя, фамилия, телефон) — если упомянуты в тексте
-2. Извлеки данные автомобиля (марка, модель, год, госномер, VIN)
-3. Кириллица→Латиница для марок и моделей: Камри→Camry, Тойота→Toyota, Хундай→Hyundai, Киа→Kia, Мерседес→Mercedes-Benz, БМВ→BMW, Фольксваген→Volkswagen, Ауди→Audi, Форд→Ford, Шевроле→Chevrolet, Ниссан→Nissan, Хонда→Honda, Мазда→Mazda, Субару→Subaru, Митсубиси→Mitsubishi, Лексус→Lexus, Инфинити→Infiniti, Рено→Renault, Пежо→Peugeot, Ситроен→Citroen, Шкода→Skoda, Опель→Opel, Вольво→Volvo, Лада→LADA, ВАЗ→LADA, Газель→GAZelle, УАЗ→UAZ
-4. Госномера — в верхний регистр, кириллица→латиница: А→A, В→B, Е→E, К→K, М→M, Н→H, О→O, Р→P, С→C, Т→T, У→Y, Х→X
-5. Извлеки жалобы клиента как текст
-6. Подбери подходящие услуги ТОЛЬКО из каталога ниже (по id)
-7. Подбери подходящие запчасти ТОЛЬКО из каталога ниже (по id), учитывая наличие на складе
-8. Выбери механика с наименьшей загрузкой из списка ниже
-9. Если информация не упомянута — оставь null
+1. Извлеки клиента (имя, фамилия, телефон) если есть
+2. Извлеки авто (марка, модель, год, госномер, VIN)
+3. Марки латиницей: Камри→Camry, Тойота→Toyota, Хундай→Hyundai, Киа→Kia, Мерседес→Mercedes-Benz, БМВ→BMW, Фольксваген→Volkswagen, Лада→LADA, Ниссан→Nissan, Мазда→Mazda, Митсубиси→Mitsubishi, Рено→Renault, Шкода→Skoda
+4. Госномера в верхний регистр, кириллица→латиница: А→A,В→B,Е→E,К→K,М→M,Н→H,О→O,Р→P,С→C,Т→T,У→Y,Х→X
+5. Подбери услуги и запчасти ТОЛЬКО из каталогов ниже по id
+6. Выбери механика с наименьшей загрузкой
+7. Если нет данных — null
 
-КАТАЛОГ УСЛУГ:
-${servicesCatalog || '(пусто)'}
+УСЛУГИ (id|название|цена|нормочасы):
+${svcLines || '(пусто)'}
 
-КАТАЛОГ ЗАПЧАСТЕЙ:
-${partsCatalog || '(пусто)'}
+ЗАПЧАСТИ (id|название|цена|остаток):
+${partLines || '(пусто)'}
 
-МЕХАНИКИ:
-${mechanicsList || '(пусто)'}
+МЕХАНИКИ (id|ФИО|активныхЗН):
+${mechLines || '(пусто)'}
 
-Ответь СТРОГО в формате JSON (без markdown, без комментариев):
-{
-  "client": {
-    "firstName": "string | null",
-    "lastName": "string | null",
-    "phone": "string | null"
-  },
-  "vehicle": {
-    "make": "string | null",
-    "model": "string | null",
-    "year": "number | null",
-    "licensePlate": "string | null",
-    "vin": "string | null"
-  },
-  "clientComplaints": "string",
-  "suggestedServices": [
-    { "serviceId": "uuid", "name": "string", "price": number, "normHours": number }
-  ],
-  "suggestedParts": [
-    { "partId": "uuid", "name": "string", "sellPrice": number, "quantity": number }
-  ],
-  "suggestedMechanicId": "uuid | null"
-}`;
+Ответ СТРОГО JSON без markdown:
+{"client":{"firstName":"str|null","lastName":"str|null","phone":"str|null"},"vehicle":{"make":"str|null","model":"str|null","year":"num|null","licensePlate":"str|null","vin":"str|null"},"clientComplaints":"str","suggestedServices":[{"serviceId":"uuid","name":"str","price":0,"normHours":0}],"suggestedParts":[{"partId":"uuid","name":"str","sellPrice":0,"quantity":1}],"suggestedMechanicId":"uuid|null"}`;
 }

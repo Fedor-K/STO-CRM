@@ -65,12 +65,13 @@ export class AiWorkOrderService {
         where: { tenantId, isActive: true },
         select: { id: true, name: true, price: true, normHours: true },
         orderBy: { name: 'asc' },
+        take: 200,
       }),
       this.prisma.part.findMany({
         where: { tenantId, currentStock: { gt: 0 } },
         select: { id: true, name: true, brand: true, sellPrice: true, currentStock: true },
         orderBy: { currentStock: 'desc' },
-        take: 300,
+        take: 100,
       }),
       this.prisma.user.findMany({
         where: { tenantId, role: 'MECHANIC', isActive: true },
