@@ -56,7 +56,6 @@ interface CancelledAppointment extends AppointmentCard {
 interface FunnelData {
   appeal: AppointmentCard[];
   estimating: AppointmentCard[];
-  scheduled: AppointmentCard[];
   diagnosis: WorkOrderCard[];
   approval: WorkOrderCard[];
   inProgress: WorkOrderCard[];
@@ -65,7 +64,6 @@ interface FunnelData {
   cancelledByStage: {
     appeal: CancelledAppointment[];
     estimating: CancelledAppointment[];
-    scheduled: CancelledAppointment[];
   };
 }
 
@@ -74,7 +72,6 @@ interface FunnelData {
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'Обращение',
   ESTIMATING: 'На согласовании',
-  CONFIRMED: 'Записан',
   NEW: 'Новый',
   DIAGNOSED: 'Осмотр',
   APPROVED: 'Согласован',
@@ -101,7 +98,6 @@ const CARD_BADGE_COLORS: Record<string, string> = {
 const FUNNEL_COLUMNS = [
   { key: 'appeal', label: 'Обращение', color: 'border-slate-400', badge: 'bg-slate-200 text-slate-700', type: 'appointment' as const },
   { key: 'estimating', label: 'Согласование', color: 'border-amber-400', badge: 'bg-amber-200 text-amber-700', type: 'appointment' as const },
-  { key: 'scheduled', label: 'Записан', color: 'border-sky-400', badge: 'bg-sky-200 text-sky-700', type: 'appointment' as const },
   { key: 'diagnosis', label: 'Осмотр', color: 'border-indigo-400', badge: 'bg-indigo-200 text-indigo-700', type: 'workorder' as const },
   { key: 'approval', label: 'Согласование', color: 'border-violet-400', badge: 'bg-violet-200 text-violet-700', type: 'workorder' as const },
   { key: 'inProgress', label: 'В работе', color: 'border-yellow-400', badge: 'bg-yellow-200 text-yellow-700', type: 'workorder' as const },
@@ -403,8 +399,6 @@ function AppointmentFunnelCard({
           method: 'PATCH',
           body: JSON.stringify({ status: 'ESTIMATING' }),
         });
-      } else if (column === 'scheduled') {
-        await apiFetch(`/work-orders/from-appointment/${appointment.id}`, { method: 'POST' });
       }
       onCreated();
     } catch (err: any) {
@@ -414,7 +408,7 @@ function AppointmentFunnelCard({
     }
   }
 
-  const actionLabel = column === 'appeal' ? 'На согласование →' : column === 'scheduled' ? 'Создать ЗН →' : null;
+  const actionLabel = column === 'appeal' ? 'На согласование →' : null;
 
   return (
     <div
@@ -1220,8 +1214,6 @@ function AppointmentDetailModal({
           method: 'PATCH',
           body: JSON.stringify({ status: 'CONFIRMED' }),
         });
-      } else if (column === 'scheduled') {
-        await apiFetch(`/work-orders/from-appointment/${appointmentId}`, { method: 'POST' });
       }
       onUpdate();
     } catch (err: any) {
@@ -1236,7 +1228,7 @@ function AppointmentDetailModal({
   const plannedParts = plannedItems.filter((i) => i.type === 'PART');
   const plannedTotal = plannedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
   const canConfirm = column === 'estimating' ? !!(arrivalDate && plannedLabors.length > 0) : true;
-  const actionLabel = column === 'appeal' ? 'На согласование' : column === 'estimating' ? 'Подтвердить → в осмотр' : column === 'scheduled' ? 'Создать заказ-наряд' : null;
+  const actionLabel = column === 'appeal' ? 'На согласование' : column === 'estimating' ? 'Подтвердить → в осмотр' : null;
   const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
 
   return (
@@ -1245,7 +1237,7 @@ function AppointmentDetailModal({
       <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${column === 'estimating' ? 'max-w-2xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">
-            {column === 'appeal' ? 'Обращение' : column === 'estimating' ? 'Согласование' : 'Запись'}
+            {column === 'appeal' ? 'Обращение' : 'Согласование'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
         </div>
@@ -1290,15 +1282,6 @@ function AppointmentDetailModal({
                 {new Date(appointment.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
-            {column === 'scheduled' && (
-              <div className="rounded-lg bg-blue-50 p-3">
-                <p className="text-xs font-medium text-blue-600">Дата записи (приезд)</p>
-                <p className="text-sm font-semibold text-blue-900">
-                  {new Date(appointment.scheduledStart).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
-            )}
-
             {/* Advisor */}
             <div>
               <label className="block text-xs font-medium text-gray-600">Приёмщик</label>
