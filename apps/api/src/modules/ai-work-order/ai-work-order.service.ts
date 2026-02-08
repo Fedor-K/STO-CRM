@@ -128,8 +128,16 @@ export class AiWorkOrderService {
     let existingClient: any = null;
 
     if (parsed.vehicle?.licensePlate) {
+      // Search by both Latin and Cyrillic variants of the plate
+      const plate = parsed.vehicle.licensePlate.toUpperCase();
+      const LAT_TO_CYR: Record<string, string> = { A: 'А', B: 'В', E: 'Е', K: 'К', M: 'М', H: 'Н', O: 'О', P: 'Р', C: 'С', T: 'Т', Y: 'У', X: 'Х' };
+      const CYR_TO_LAT: Record<string, string> = Object.fromEntries(Object.entries(LAT_TO_CYR).map(([l, c]) => [c, l]));
+      const cyrPlate = plate.replace(/[A-Z]/g, (ch) => LAT_TO_CYR[ch] || ch);
+      const latPlate = plate.replace(/[А-Я]/g, (ch) => CYR_TO_LAT[ch] || ch);
+      const plateVariants = [...new Set([plate, cyrPlate, latPlate])];
+
       existingVehicle = await this.prisma.vehicle.findFirst({
-        where: { tenantId, licensePlate: parsed.vehicle.licensePlate },
+        where: { tenantId, licensePlate: { in: plateVariants } },
         include: { client: { select: { id: true, firstName: true, lastName: true, phone: true } } },
       });
     }
