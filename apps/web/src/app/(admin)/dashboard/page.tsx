@@ -1236,7 +1236,7 @@ function AppointmentDetailModal({
   const plannedParts = plannedItems.filter((i) => i.type === 'PART');
   const plannedTotal = plannedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
   const canConfirm = column === 'estimating' ? !!(arrivalDate && plannedLabors.length > 0) : true;
-  const actionLabel = column === 'appeal' ? 'На согласование' : column === 'estimating' ? 'Подтвердить → в осмотр' : column === 'scheduled' ? 'Создать заказ-наряд' : null;
+  const actionLabel = column === 'appeal' ? 'На согласование' : column === 'estimating' ? 'Подтвердить' : column === 'scheduled' ? 'Создать заказ-наряд' : null;
   const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
 
   return (

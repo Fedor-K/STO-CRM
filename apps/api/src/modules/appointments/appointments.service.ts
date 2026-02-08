@@ -1,8 +1,7 @@
-import { Injectable, Inject, forwardRef, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { paginate, type PaginatedResponse } from '../../common/dto/pagination.dto';
 import { Appointment, AppointmentStatus } from '@prisma/client';
-import { WorkOrdersService } from '../work-orders/work-orders.service';
 
 const appointmentInclude = {
   client: { select: { id: true, firstName: true, lastName: true, phone: true, email: true } },
@@ -13,13 +12,7 @@ const appointmentInclude = {
 
 @Injectable()
 export class AppointmentsService {
-  private readonly logger = new Logger(AppointmentsService.name);
-
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(forwardRef(() => WorkOrdersService))
-    private readonly workOrdersService: WorkOrdersService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async findAll(
     tenantId: string,
@@ -109,34 +102,17 @@ export class AppointmentsService {
     tenantId: string,
     id: string,
     status: AppointmentStatus,
-    userId?: string,
   ): Promise<any> {
     const existing = await this.findById(tenantId, id);
     const data: any = { status };
     if (status === 'CANCELLED') {
       data.cancelledFrom = existing.status;
     }
-    const updated = await this.prisma.appointment.update({
+    return this.prisma.appointment.update({
       where: { id },
       data,
       include: appointmentInclude,
     });
-
-    // Auto-create work order when appointment is confirmed
-    if (status === 'CONFIRMED') {
-      try {
-        await this.workOrdersService.createFromAppointment(tenantId, id, userId);
-      } catch (err: any) {
-        // Don't fail the status update if WO already exists
-        if (err?.message?.includes('уже создан')) {
-          this.logger.warn(`WO already exists for appointment ${id}`);
-        } else {
-          throw err;
-        }
-      }
-    }
-
-    return this.findById(tenantId, id);
   }
 
   async update(
