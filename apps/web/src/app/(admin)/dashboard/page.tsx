@@ -8,6 +8,8 @@ import Link from 'next/link';
 import {
   INSPECTION_GROUPS,
   SLIDER_CONFIG,
+  AUTO_RECOMMEND_CONFIG,
+  isCriticalLevel,
   createEmptyChecklist,
   type InspectionChecklist,
 } from '@sto-crm/shared';
@@ -2652,6 +2654,35 @@ function InspectionChecklistEditor({
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [suggestForItem, setSuggestForItem] = useState<string | null>(null);
   const [suggestService, setSuggestService] = useState<{ id: string; name: string; normHours: string | number | null } | null>(null);
+  const [autoRecommending, setAutoRecommending] = useState<string | null>(null);
+  const checklistRef = useRef(checklist);
+  checklistRef.current = checklist;
+
+  async function autoRecommend(itemKey: string) {
+    const cfg = AUTO_RECOMMEND_CONFIG[itemKey];
+    if (!cfg) return;
+    setAutoRecommending(itemKey);
+    try {
+      const res = await apiFetch(`/services?limit=5&sort=name&order=asc&search=${encodeURIComponent(cfg.searchQuery)}`) as { data?: { id: string; name: string; price: string | number; normHours: string | number | null }[] };
+      const svc = res?.data?.[0];
+      if (svc) {
+        onChange({
+          ...checklistRef.current,
+          [itemKey]: { ...checklistRef.current[itemKey], recommended: true, recommendedDescription: svc.name },
+        });
+        onAddService(svc);
+      } else {
+        // Услуга не найдена — показываем ручной выбор
+        setSuggestForItem(itemKey);
+        setSuggestService(null);
+      }
+    } catch {
+      setSuggestForItem(itemKey);
+      setSuggestService(null);
+    } finally {
+      setAutoRecommending(null);
+    }
+  }
 
   function toggleGroup(key: string) {
     setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -2680,8 +2711,15 @@ function InspectionChecklistEditor({
         [itemKey]: { ...checklist[itemKey], checked: !wasChecked },
       });
       if (!wasChecked) {
-        setSuggestForItem(itemKey);
-        setSuggestService(null);
+        // Проверяем: если у ползунка критическое значение — авторекомендация
+        const sliderCfg = SLIDER_CONFIG[itemKey];
+        const level = entry?.level ?? sliderCfg?.defaultValue;
+        if (sliderCfg && level != null && isCriticalLevel(itemKey, level)) {
+          autoRecommend(itemKey);
+        } else {
+          setSuggestForItem(itemKey);
+          setSuggestService(null);
+        }
       }
     }
   }
@@ -2698,6 +2736,11 @@ function InspectionChecklistEditor({
       ...checklist,
       [itemKey]: { ...checklist[itemKey], level },
     });
+    // Если пункт уже отмечен, не рекомендован, и значение стало критическим — авторекомендация
+    const entry = checklist[itemKey];
+    if (entry?.checked && !entry?.recommended && !autoRecommending && isCriticalLevel(itemKey, level)) {
+      autoRecommend(itemKey);
+    }
   }
 
   return (
@@ -2735,6 +2778,9 @@ function InspectionChecklistEditor({
                           />
                           <div className="flex-1 min-w-0">
                             <span className="text-xs text-gray-700">{item.label}</span>
+                            {autoRecommending === item.key && (
+                              <span className="ml-1.5 inline-flex items-center rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 animate-pulse">⟳ подбор...</span>
+                            )}
                             {entry.recommended && (
                               <span className="ml-1.5 inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">● рек.</span>
                             )}

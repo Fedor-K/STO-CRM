@@ -44,6 +44,34 @@ export const SLIDER_CONFIG: Record<string, SliderConfig> = {
 /** @deprecated Use SLIDER_CONFIG instead */
 export const LEVEL_ITEMS = new Set(Object.keys(SLIDER_CONFIG));
 
+export interface AutoRecommendConfig {
+  /** Порог: если значение ниже (или выше для 'above') — авторекомендация */
+  threshold: number;
+  /** 'below' = рекомендовать когда level ≤ threshold, 'above' = когда level ≥ threshold */
+  direction: 'below' | 'above';
+  /** Поисковый запрос для автоподбора услуги */
+  searchQuery: string;
+}
+
+/** Авторекомендации: когда ползунок в критической зоне → автоматически подбирается услуга */
+export const AUTO_RECOMMEND_CONFIG: Record<string, AutoRecommendConfig> = {
+  perednieTormoznyeKolodki:   { threshold: 30, direction: 'below', searchQuery: 'колодки передн' },
+  zadnieTormoznyeKolodki:     { threshold: 30, direction: 'below', searchQuery: 'колодки задн' },
+  tormoznayaZhidkost:         { threshold: 3,  direction: 'above', searchQuery: 'тормозная жидкость' },
+  urovenMotornogMasla:        { threshold: 25, direction: 'below', searchQuery: 'масло моторн' },
+  urovenMaslaKpp:             { threshold: 25, direction: 'below', searchQuery: 'масло КПП' },
+  urovenMaslaGur:             { threshold: 25, direction: 'below', searchQuery: 'масло ГУР' },
+  ohlazhdayushhayaZhidkost:   { threshold: 25, direction: 'below', searchQuery: 'охлаждающая жидкость' },
+  stekloomyvayushhayaZhidkost:{ threshold: 25, direction: 'below', searchQuery: 'стеклоомывающая' },
+};
+
+/** Проверяет, находится ли значение ползунка в критической зоне */
+export function isCriticalLevel(itemKey: string, level: number): boolean {
+  const cfg = AUTO_RECOMMEND_CONFIG[itemKey];
+  if (!cfg) return false;
+  return cfg.direction === 'below' ? level <= cfg.threshold : level >= cfg.threshold;
+}
+
 export type InspectionChecklist = Record<string, InspectionChecklistEntry>;
 
 export const INSPECTION_GROUPS: InspectionGroup[] = [
