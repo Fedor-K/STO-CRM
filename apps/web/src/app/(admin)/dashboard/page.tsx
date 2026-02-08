@@ -1081,6 +1081,23 @@ function AppointmentDetailModal({
   const [selectedPart, setSelectedPart] = useState<{ id: string; name: string; sellPrice: string | number; brand: string | null } | null>(null);
   const [partQty, setPartQty] = useState('1');
 
+  // Load stock info for planned parts
+  const partIds = plannedItems.filter((i) => i.type === 'PART' && i.partId).map((i) => i.partId!);
+  const { data: stockMap } = useQuery<Record<string, number>>({
+    queryKey: ['part-stocks', partIds.join(',')],
+    queryFn: async () => {
+      if (partIds.length === 0) return {};
+      const results = await Promise.all(
+        partIds.map((pid) => apiFetch<{ currentStock: number }>(`/parts/${pid}`).catch(() => null)),
+      );
+      const map: Record<string, number> = {};
+      partIds.forEach((pid, i) => { if (results[i]) map[pid] = results[i]!.currentStock ?? 0; });
+      return map;
+    },
+    enabled: partIds.length > 0,
+    staleTime: 30_000,
+  });
+
   if (appointment && !initialized) {
     setNotes(appointment.notes || '');
     setAdvisorId(appointment.advisor?.id || '');
@@ -1430,23 +1447,32 @@ function AppointmentDetailModal({
                               <tr className="border-b border-gray-100 text-left text-gray-500">
                                 <th className="pb-1 font-medium">Наименование</th>
                                 <th className="pb-1 font-medium text-right w-16">Кол-во</th>
+                                <th className="pb-1 font-medium text-right w-16">Остаток</th>
                                 <th className="pb-1 font-medium text-right w-20">Всего</th>
                                 <th className="pb-1 font-medium text-right">в т.ч. НДС</th>
                                 <th className="pb-1 w-6"></th>
                               </tr>
                             </thead>
                             <tbody>
-                              {plannedItems.map((item, idx) => item.type === 'PART' && (
+                              {plannedItems.map((item, idx) => {
+                                if (item.type !== 'PART') return null;
+                                const stock = item.partId && stockMap ? stockMap[item.partId] : undefined;
+                                const outOfStock = stock !== undefined && stock < item.quantity;
+                                return (
                                 <tr key={idx} className="border-b border-gray-50">
                                   <td className="py-1.5 text-gray-700">{item.description}</td>
                                   <td className="py-1.5 text-right text-gray-600">{item.quantity}</td>
+                                  <td className={`py-1.5 text-right font-medium ${outOfStock ? 'text-red-600' : 'text-green-600'}`}>
+                                    {stock !== undefined ? stock : '—'}
+                                  </td>
                                   <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
                                   <td className="py-1.5 text-right text-gray-400">{formatVat(item.unitPrice * item.quantity)}</td>
                                   <td className="py-1.5 text-right">
                                     <button onClick={() => handleRemovePlannedItem(idx)} className="text-red-400 hover:text-red-600">&times;</button>
                                   </td>
                                 </tr>
-                              ))}
+                                );
+                              })}
                             </tbody>
                           </table>
                         ) : (
