@@ -211,14 +211,36 @@ export class AiWorkOrderService {
       });
     }
     // Fallback: search by name if still not found
+    // AI may swap firstName/lastName, so try both orientations
     if (!existingClient && (parsed.client?.lastName || parsed.client?.firstName)) {
-      const nameWhere: any = { tenantId, role: 'CLIENT' };
-      if (parsed.client.lastName) nameWhere.lastName = { contains: parsed.client.lastName, mode: 'insensitive' };
-      if (parsed.client.firstName) nameWhere.firstName = { contains: parsed.client.firstName, mode: 'insensitive' };
-      existingClient = await this.prisma.user.findFirst({
-        where: nameWhere,
-        select: { id: true, firstName: true, lastName: true, phone: true },
-      });
+      const ln = parsed.client.lastName?.trim();
+      const fn = parsed.client.firstName?.trim();
+      if (ln && fn) {
+        // Try both orientations: (lastName=ln, firstName=fn) OR (lastName=fn, firstName=ln)
+        existingClient = await this.prisma.user.findFirst({
+          where: {
+            tenantId, role: 'CLIENT',
+            OR: [
+              { lastName: { contains: ln, mode: 'insensitive' }, firstName: { contains: fn, mode: 'insensitive' } },
+              { lastName: { contains: fn, mode: 'insensitive' }, firstName: { contains: ln, mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true, firstName: true, lastName: true, phone: true },
+        });
+      } else {
+        // Only one name part — search in both fields
+        const name = ln || fn;
+        existingClient = await this.prisma.user.findFirst({
+          where: {
+            tenantId, role: 'CLIENT',
+            OR: [
+              { lastName: { contains: name, mode: 'insensitive' } },
+              { firstName: { contains: name, mode: 'insensitive' } },
+            ],
+          },
+          select: { id: true, firstName: true, lastName: true, phone: true },
+        });
+      }
     }
 
     // If we found client by name but no vehicle yet, try to find their latest vehicle
