@@ -215,31 +215,32 @@ export class AiWorkOrderService {
     if (!existingClient && (parsed.client?.lastName || parsed.client?.firstName)) {
       const ln = parsed.client.lastName?.trim();
       const fn = parsed.client.firstName?.trim();
-      if (ln && fn) {
-        // Try both orientations: (lastName=ln, firstName=fn) OR (lastName=fn, firstName=ln)
-        existingClient = await this.prisma.user.findFirst({
-          where: {
-            tenantId, role: 'CLIENT',
-            OR: [
-              { lastName: { contains: ln, mode: 'insensitive' }, firstName: { contains: fn, mode: 'insensitive' } },
-              { lastName: { contains: fn, mode: 'insensitive' }, firstName: { contains: ln, mode: 'insensitive' } },
-            ],
-          },
-          select: { id: true, firstName: true, lastName: true, phone: true },
-        });
-      } else {
-        // Only one name part — search in both fields
-        const name = ln || fn;
-        existingClient = await this.prisma.user.findFirst({
-          where: {
-            tenantId, role: 'CLIENT',
-            OR: [
-              { lastName: { contains: name, mode: 'insensitive' } },
-              { firstName: { contains: name, mode: 'insensitive' } },
-            ],
-          },
-          select: { id: true, firstName: true, lastName: true, phone: true },
-        });
+
+      const nameOrConditions = (ln && fn)
+        ? [
+            { lastName: { contains: ln, mode: 'insensitive' as const }, firstName: { contains: fn, mode: 'insensitive' as const } },
+            { lastName: { contains: fn, mode: 'insensitive' as const }, firstName: { contains: ln, mode: 'insensitive' as const } },
+          ]
+        : [
+            { lastName: { contains: (ln || fn)!, mode: 'insensitive' as const } },
+            { firstName: { contains: (ln || fn)!, mode: 'insensitive' as const } },
+          ];
+
+      const candidates = await this.prisma.user.findMany({
+        where: { tenantId, role: 'CLIENT', OR: nameOrConditions },
+        select: { id: true, firstName: true, lastName: true, phone: true },
+        take: 10,
+      });
+
+      if (candidates.length === 1) {
+        existingClient = candidates[0];
+      } else if (candidates.length > 1) {
+        // Multiple matches — try narrowing by phone
+        if (parsed.client?.phone) {
+          const byPhone = candidates.find((c) => c.phone === parsed.client!.phone);
+          if (byPhone) existingClient = byPhone;
+        }
+        // If still ambiguous, don't guess — leave as "new" so user picks manually
       }
     }
 
