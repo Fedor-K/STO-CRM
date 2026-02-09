@@ -212,6 +212,7 @@ export class AiWorkOrderService {
     }
     // Fallback: search by name if still not found
     // AI may swap firstName/lastName, so try both orientations
+    let candidateClients: { id: string; firstName: string; lastName: string; phone: string | null; middleName?: string | null }[] = [];
     if (!existingClient && (parsed.client?.lastName || parsed.client?.firstName)) {
       const ln = parsed.client.lastName?.trim();
       const fn = parsed.client.firstName?.trim();
@@ -228,19 +229,25 @@ export class AiWorkOrderService {
 
       const candidates = await this.prisma.user.findMany({
         where: { tenantId, role: 'CLIENT', OR: nameOrConditions },
-        select: { id: true, firstName: true, lastName: true, phone: true },
+        select: { id: true, firstName: true, lastName: true, middleName: true, phone: true },
         take: 10,
       });
 
       if (candidates.length === 1) {
         existingClient = candidates[0];
       } else if (candidates.length > 1) {
-        // Multiple matches — try narrowing by phone
+        // Try narrowing by phone first
         if (parsed.client?.phone) {
           const byPhone = candidates.find((c) => c.phone === parsed.client!.phone);
-          if (byPhone) existingClient = byPhone;
+          if (byPhone) {
+            existingClient = byPhone;
+          }
         }
-        // If still ambiguous, don't guess — leave as "new" so user picks manually
+        // If still ambiguous, pick the first but return all candidates for user to choose
+        if (!existingClient) {
+          existingClient = candidates[0];
+          candidateClients = candidates;
+        }
       }
     }
 
@@ -273,6 +280,13 @@ export class AiWorkOrderService {
         phone: existingClient?.phone || parsed.client?.phone || null,
         isNew: !existingClient,
       },
+      candidateClients: candidateClients.length > 1 ? candidateClients.map((c) => ({
+        id: c.id,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        middleName: c.middleName || null,
+        phone: c.phone,
+      })) : [],
       vehicle: {
         existingId: existingVehicle?.id || null,
         make: existingVehicle?.make || parsed.vehicle?.make || null,

@@ -3470,8 +3470,17 @@ function SearchablePartSelect({
 
 type AiModalStep = 'input' | 'parsing' | 'preview' | 'creating' | 'done';
 
+interface AiCandidateClient {
+  id: string;
+  firstName: string;
+  lastName: string;
+  middleName: string | null;
+  phone: string | null;
+}
+
 interface AiParseResult {
   client: { existingId: string | null; firstName: string | null; lastName: string | null; phone: string | null; isNew: boolean };
+  candidateClients: AiCandidateClient[];
   vehicle: { existingId: string | null; make: string | null; model: string | null; year: number | null; licensePlate: string | null; vin: string | null; isNew: boolean };
   clientComplaints: string;
   suggestedServices: { serviceId: string; name: string; price: number; normHours: number }[];
@@ -3637,7 +3646,7 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
             {/* Client */}
             <div className="rounded-lg border border-gray-200 p-3">
               <h3 className="mb-2 text-sm font-semibold text-gray-700">
-                Клиент {preview.client.isNew ? <span className="text-xs font-normal text-green-600">(новый)</span> : <span className="text-xs font-normal text-blue-600">(найден в базе)</span>}
+                Клиент {preview.client.isNew ? <span className="text-xs font-normal text-green-600">(новый)</span> : preview.candidateClients.length > 1 ? <span className="text-xs font-normal text-amber-600">(выберите из базы)</span> : <span className="text-xs font-normal text-blue-600">(найден в базе)</span>}
               </h3>
               {preview.client.isNew ? (
                 <div className="grid grid-cols-3 gap-2">
@@ -3645,6 +3654,26 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                   <input value={editFirstName} onChange={(e) => setEditFirstName(e.target.value)} placeholder="Имя" className="rounded border border-gray-300 px-2 py-1 text-sm" />
                   <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="Телефон" className="rounded border border-gray-300 px-2 py-1 text-sm" />
                 </div>
+              ) : preview.candidateClients.length > 1 ? (
+                <select
+                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  value={preview.client.existingId || ''}
+                  onChange={(e) => {
+                    const selected = preview.candidateClients.find((c) => c.id === e.target.value);
+                    if (selected) {
+                      setPreview({
+                        ...preview,
+                        client: { existingId: selected.id, firstName: selected.firstName, lastName: selected.lastName, phone: selected.phone, isNew: false },
+                      });
+                    }
+                  }}
+                >
+                  {preview.candidateClients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.lastName} {c.firstName}{c.middleName ? ` ${c.middleName}` : ''}{c.phone ? ` • ${c.phone}` : ''}
+                    </option>
+                  ))}
+                </select>
               ) : (
                 <p className="text-sm text-gray-600">{preview.client.lastName} {preview.client.firstName} {preview.client.phone && `• ${preview.client.phone}`}</p>
               )}
