@@ -718,6 +718,16 @@ function ClientModal({
 
 // --- Appointment Detail Modal ---
 
+interface PlannedItem {
+  type: 'LABOR' | 'PART';
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  serviceId?: string;
+  partId?: string;
+}
+
 interface AppointmentDetail {
   id: string;
   scheduledStart: string;
@@ -726,6 +736,7 @@ interface AppointmentDetail {
   notes: string | null;
   source: string | null;
   adChannel: string | null;
+  plannedItems: PlannedItem[] | null;
   client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
@@ -799,7 +810,7 @@ function AppointmentDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${appointment?.plannedItems?.length ? 'max-w-2xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-bold text-gray-900">Запись</h2>
@@ -907,6 +918,54 @@ function AppointmentDetailModal({
                 </div>
               </>
             )}
+
+            {/* Работы и материалы из plannedItems */}
+            {appointment.plannedItems && appointment.plannedItems.length > 0 && (() => {
+              const laborItems = appointment.plannedItems!.filter((i) => i.type === 'LABOR');
+              const partItems = appointment.plannedItems!.filter((i) => i.type === 'PART');
+              const totalLabor = laborItems.reduce((s, i) => s + (i.totalPrice || i.quantity * i.unitPrice), 0);
+              const totalParts = partItems.reduce((s, i) => s + (i.totalPrice || i.quantity * i.unitPrice), 0);
+
+              return (
+                <div className="space-y-3">
+                  {laborItems.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600 mb-1">Работы ({laborItems.length})</p>
+                      <div className="space-y-1">
+                        {laborItems.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-xs">
+                            <span className="text-gray-700 flex-1 mr-2">{item.description}</span>
+                            <span className="text-gray-500 whitespace-nowrap">{item.quantity} × {formatMoney(item.unitPrice)}</span>
+                            <span className="font-semibold text-gray-700 ml-3 whitespace-nowrap">{formatMoney(item.totalPrice || item.quantity * item.unitPrice)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {partItems.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600 mb-1">Материалы ({partItems.length})</p>
+                      <div className="space-y-1">
+                        {partItems.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-xs">
+                            <span className="text-gray-700 flex-1 mr-2">{item.description}</span>
+                            <span className="text-gray-500 whitespace-nowrap">{item.quantity} × {formatMoney(item.unitPrice)}</span>
+                            <span className="font-semibold text-gray-700 ml-3 whitespace-nowrap">{formatMoney(item.totalPrice || item.quantity * item.unitPrice)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-4 rounded-lg bg-gray-50 px-4 py-2">
+                    {totalLabor > 0 && <div className="text-xs text-gray-500">Работы: <span className="font-semibold text-gray-700">{formatMoney(totalLabor)}</span></div>}
+                    {totalParts > 0 && <div className="text-xs text-gray-500">Материалы: <span className="font-semibold text-gray-700">{formatMoney(totalParts)}</span></div>}
+                    <div className="text-sm font-bold text-gray-900">Итого: {formatMoney(totalLabor + totalParts)}</div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         ) : (
           <div className="py-8 text-center text-red-500">Не удалось загрузить данные</div>
