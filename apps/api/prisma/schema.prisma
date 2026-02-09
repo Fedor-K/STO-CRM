@@ -199,7 +199,7 @@ model Vehicle {
   workOrders   WorkOrder[]
 
   @@unique([vin, tenantId])
-  @@unique([licensePlate, tenantId])
+  @@index([licensePlate, tenantId])
   @@index([tenantId])
   @@index([clientId])
   @@map("vehicles")
