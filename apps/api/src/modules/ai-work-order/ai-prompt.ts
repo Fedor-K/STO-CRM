@@ -2,6 +2,7 @@ export function buildSystemPrompt(
   services: { id: string; name: string; price: number; normHours: number | null }[],
   parts: { id: string; name: string; brand: string | null; sellPrice: number; currentStock: number }[],
   mechanics: { id: string; firstName: string; lastName: string; activeOrdersCount: number }[],
+  history?: { make: string; model: string; entries: VehicleHistoryEntry[] },
 ): string {
   const svcLines = services.map((s) => `${s.id}|${s.name}|${s.price}|${s.normHours ?? ''}`).join('\n');
   const partLines = parts.map((p) => `${p.id}|${p.name}|${p.sellPrice}|${p.currentStock}`).join('\n');
@@ -28,9 +29,31 @@ ${partLines || '(пусто)'}
 
 МЕХАНИКИ (id|ФИО|активныхЗН):
 ${mechLines || '(пусто)'}
-
+${history?.entries.length ? formatVehicleHistory(history.make, history.model, history.entries) : ''}
 Ответ СТРОГО JSON без markdown:
 {"client":{"firstName":"str|null","lastName":"str|null","phone":"str|null"},"vehicle":{"make":"str|null","model":"str|null","year":"num|null","licensePlate":"str|null","vin":"str|null"},"clientComplaints":"str","suggestedServices":[{"serviceId":"uuid","name":"str","price":0,"normHours":0}],"suggestedParts":[{"partId":"uuid","name":"str","sellPrice":0,"quantity":1}],"suggestedMechanicId":"uuid|null"}`;
+}
+
+export interface VehicleHistoryEntry {
+  service: string;
+  parts: { name: string; avgPrice: number; count: number }[];
+}
+
+export function formatVehicleHistory(
+  make: string,
+  model: string,
+  history: VehicleHistoryEntry[],
+): string {
+  if (history.length === 0) return '';
+
+  const lines = history.map((h) => {
+    const partList = h.parts.map((p) => `${p.name} ~${p.avgPrice}₽ (${p.count}×)`).join(', ');
+    return `- При "${h.service}": ${partList}`;
+  });
+
+  return `\nИСТОРИЯ ИСПОЛЬЗОВАНИЯ НА ${make} ${model} (из прошлых ЗН нашего автосервиса):
+${lines.join('\n')}
+ВАЖНО: используй историю как подсказку для подбора запчастей. Если в истории видно, какие запчасти реально ставились на этот авто — предпочитай их. Но бери ТОЛЬКО из каталога выше (по id).`;
 }
 
 export function buildAdjustPrompt(
@@ -40,12 +63,17 @@ export function buildAdjustPrompt(
   currentParts: { partId: string; name: string }[],
   services: { id: string; name: string; price: number; normHours: number | null }[],
   parts: { id: string; name: string; sellPrice: number; currentStock: number }[],
+  history?: VehicleHistoryEntry[],
 ): string {
   const svcLines = services.map((s) => `${s.id}|${s.name}|${s.price}|${s.normHours ?? ''}`).join('\n');
   const partLines = parts.map((p) => `${p.id}|${p.name}|${p.sellPrice}|${p.currentStock}`).join('\n');
 
   const curSvc = currentServices.map((s) => `${s.serviceId}|${s.name}`).join('\n');
   const curParts = currentParts.map((p) => `${p.partId}|${p.name}`).join('\n');
+
+  const historySection = history?.length
+    ? formatVehicleHistory(vehicle.make, vehicle.model, history)
+    : '';
 
   return `Ты — AI-ассистент автосервиса. Пользователь сменил автомобиль. Скорректируй подобранные услуги и запчасти с учётом конкретного авто.
 
@@ -65,13 +93,14 @@ ${curParts || '(пусто)'}
 4. Аналогично для других систем: подбирай услуги и запчасти, подходящие именно для этого авто
 5. Бери услуги и запчасти ТОЛЬКО из каталогов ниже (по id)
 6. Не меняй то, что уже корректно подобрано
+7. Если есть ИСТОРИЯ ИСПОЛЬЗОВАНИЯ — учитывай её при подборе запчастей, предпочитай проверенные комбинации
 
 КАТАЛОГ УСЛУГ (id|название|цена|нормочасы):
 ${svcLines || '(пусто)'}
 
 КАТАЛОГ ЗАПЧАСТЕЙ (id|название|цена|остаток):
 ${partLines || '(пусто)'}
-
+${historySection}
 Ответ СТРОГО JSON без markdown:
 {"suggestedServices":[{"serviceId":"uuid","name":"str","price":0,"normHours":0}],"suggestedParts":[{"partId":"uuid","name":"str","sellPrice":0,"quantity":1}],"explanation":"краткое пояснение что изменилось и почему"}`;
 }

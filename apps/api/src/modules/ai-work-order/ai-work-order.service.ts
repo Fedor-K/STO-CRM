@@ -7,7 +7,7 @@ import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { UsersService } from '../users/users.service';
 import { VehiclesService } from '../vehicles/vehicles.service';
-import { buildSystemPrompt, buildAdjustPrompt } from './ai-prompt';
+import { buildSystemPrompt, buildAdjustPrompt, type VehicleHistoryEntry } from './ai-prompt';
 
 interface ParsedAiResult {
   client: {
@@ -54,6 +54,44 @@ export class AiWorkOrderService {
       opts.fetch = ((url: any, init: any) => undiciFetch(url, { ...init, dispatcher: agent })) as any;
     }
     this.anthropic = new Anthropic(opts);
+  }
+
+  /**
+   * Запрашивает историю использования запчастей по марке+модели из прошлых ЗН.
+   * Группирует: какие запчасти использовались при каких работах.
+   */
+  private async getVehicleHistory(tenantId: string, make: string, model: string): Promise<VehicleHistoryEntry[]> {
+    const rows = await this.prisma.$queryRaw<{ service: string; part: string; avg_price: number; cnt: number }[]>`
+      SELECT
+        labor.description as service,
+        part.description as part,
+        ROUND(AVG(part."unitPrice")::numeric, 0) as avg_price,
+        COUNT(*)::int as cnt
+      FROM work_order_items labor
+      JOIN work_order_items part ON labor."workOrderId" = part."workOrderId" AND part.type = 'PART'
+      JOIN work_orders wo ON labor."workOrderId" = wo.id
+      JOIN vehicles v ON wo."vehicleId" = v.id
+      WHERE labor.type = 'LABOR'
+        AND UPPER(v.make) = UPPER(${make})
+        AND UPPER(v.model) = UPPER(${model})
+        AND wo."tenantId" = ${tenantId}
+      GROUP BY labor.description, part.description
+      HAVING COUNT(*) >= 2
+      ORDER BY COUNT(*) DESC
+      LIMIT 50
+    `;
+
+    const byService = new Map<string, { name: string; avgPrice: number; count: number }[]>();
+    for (const row of rows) {
+      if (!byService.has(row.service)) byService.set(row.service, []);
+      byService.get(row.service)!.push({
+        name: row.part,
+        avgPrice: Number(row.avg_price),
+        count: Number(row.cnt),
+      });
+    }
+
+    return [...byService.entries()].map(([service, parts]) => ({ service, parts }));
   }
 
   async parse(tenantId: string, description: string) {
@@ -275,6 +313,18 @@ export class AiWorkOrderService {
     const validServices = (parsed.suggestedServices || []).filter((s) => serviceIds.has(s.serviceId));
     const validParts = (parsed.suggestedParts || []).filter((p) => partIds.has(p.partId));
 
+    // 7. Get vehicle history for the detected make+model
+    const vehicleMake = existingVehicle?.make || parsed.vehicle?.make;
+    const vehicleModel = existingVehicle?.model || parsed.vehicle?.model;
+    let vehicleHistory: VehicleHistoryEntry[] = [];
+    if (vehicleMake && vehicleModel) {
+      try {
+        vehicleHistory = await this.getVehicleHistory(tenantId, vehicleMake, vehicleModel);
+      } catch (e) {
+        this.logger.warn(`Ошибка получения истории авто: ${e}`);
+      }
+    }
+
     return {
       client: {
         existingId: existingClient?.id || null,
@@ -330,6 +380,7 @@ export class AiWorkOrderService {
             activeOrdersCount: suggestedMechanic.activeOrdersCount,
           }
         : null,
+      vehicleHistory: vehicleHistory.length > 0 ? vehicleHistory : undefined,
     };
   }
 
@@ -461,7 +512,7 @@ export class AiWorkOrderService {
       ? { OR: uniqueKeywords.map((kw) => ({ name: { contains: kw, mode: 'insensitive' as const } })) }
       : {};
 
-    const [services, topServices, parts, topParts] = await Promise.all([
+    const [services, topServices, parts, topParts, vehicleHistory] = await Promise.all([
       this.prisma.service.findMany({
         where: { tenantId, isActive: true, ...keywordFilter },
         select: { id: true, name: true, price: true, normHours: true },
@@ -488,6 +539,10 @@ export class AiWorkOrderService {
         orderBy: { currentStock: 'desc' },
         take: 50,
       }),
+      this.getVehicleHistory(tenantId, data.vehicle.make, data.vehicle.model).catch((e) => {
+        this.logger.warn(`Ошибка получения истории авто: ${e}`);
+        return [] as VehicleHistoryEntry[];
+      }),
     ]);
 
     const svcMap = new Map<string, typeof services[0]>();
@@ -505,6 +560,7 @@ export class AiWorkOrderService {
       data.currentParts,
       allServices.map((s) => ({ ...s, price: Number(s.price), normHours: s.normHours ? Number(s.normHours) : null })),
       allParts.map((p) => ({ ...p, sellPrice: Number(p.sellPrice) })),
+      vehicleHistory,
     );
 
     const message = await this.anthropic.messages.create({
