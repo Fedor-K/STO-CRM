@@ -210,6 +210,24 @@ export class AiWorkOrderService {
         select: { id: true, firstName: true, lastName: true, phone: true },
       });
     }
+    // Fallback: search by name if still not found
+    if (!existingClient && (parsed.client?.lastName || parsed.client?.firstName)) {
+      const nameWhere: any = { tenantId, role: 'CLIENT' };
+      if (parsed.client.lastName) nameWhere.lastName = { contains: parsed.client.lastName, mode: 'insensitive' };
+      if (parsed.client.firstName) nameWhere.firstName = { contains: parsed.client.firstName, mode: 'insensitive' };
+      existingClient = await this.prisma.user.findFirst({
+        where: nameWhere,
+        select: { id: true, firstName: true, lastName: true, phone: true },
+      });
+    }
+
+    // If we found client by name but no vehicle yet, try to find their latest vehicle
+    if (existingClient && !existingVehicle) {
+      existingVehicle = await this.prisma.vehicle.findFirst({
+        where: { tenantId, clientId: existingClient.id },
+        orderBy: { updatedAt: 'desc' },
+      });
+    }
 
     // 5. Pick mechanic with least load
     const sortedMechanics = [...mechanics].sort((a, b) => a.activeOrdersCount - b.activeOrdersCount);
