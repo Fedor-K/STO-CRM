@@ -754,6 +754,7 @@ function AppointmentDetailModal({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [itemsTab, setItemsTab] = useState<'LABOR' | 'PART'>('LABOR');
 
   const { data: appointment, isLoading } = useQuery<AppointmentDetail>({
     queryKey: ['appointment-detail', appointmentId],
@@ -769,7 +770,7 @@ function AppointmentDetailModal({
   // Если нет plannedItems, но есть привязанный ЗН — подтягиваем позиции из него
   const woId = appointment?.workOrder?.id;
   const hasPlannedItems = appointment?.plannedItems && appointment.plannedItems.length > 0;
-  const { data: woDetail } = useQuery<{ items: { type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number }[] }>({
+  const { data: woDetail } = useQuery<{ items: { type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number; normHours: number | null }[] }>({
     queryKey: ['wo-items-for-appt', woId],
     queryFn: () => apiFetch(`/work-orders/${woId}`),
     enabled: !!woId && !hasPlannedItems,
@@ -930,9 +931,9 @@ function AppointmentDetailModal({
               </>
             )}
 
-            {/* Работы и материалы — из plannedItems или из ЗН */}
+            {/* Работы и материалы — табы */}
             {(() => {
-              const items: { type: string; description: string; quantity: number; unitPrice: number; totalPrice: number }[] =
+              const items: { type: string; description: string; quantity: number; unitPrice: number; totalPrice: number; normHours?: number | null }[] =
                 (appointment.plannedItems && appointment.plannedItems.length > 0)
                   ? appointment.plannedItems
                   : (woDetail?.items || []).map((i) => ({
@@ -941,6 +942,7 @@ function AppointmentDetailModal({
                       quantity: i.quantity,
                       unitPrice: Number(i.unitPrice),
                       totalPrice: Number(i.totalPrice),
+                      normHours: i.normHours,
                     }));
 
               if (items.length === 0) return null;
@@ -949,43 +951,75 @@ function AppointmentDetailModal({
               const partItems = items.filter((i) => i.type === 'PART');
               const totalLabor = laborItems.reduce((s, i) => s + (i.totalPrice || i.quantity * i.unitPrice), 0);
               const totalParts = partItems.reduce((s, i) => s + (i.totalPrice || i.quantity * i.unitPrice), 0);
+              const activeItems = itemsTab === 'LABOR' ? laborItems : partItems;
 
               return (
-                <div className="space-y-3">
-                  {laborItems.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-600 mb-1">Работы ({laborItems.length})</p>
-                      <div className="space-y-1">
-                        {laborItems.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-xs">
-                            <span className="text-gray-700 flex-1 mr-2">{item.description}</span>
-                            <span className="text-gray-500 whitespace-nowrap">{item.quantity} × {formatMoney(item.unitPrice)}</span>
-                            <span className="font-semibold text-gray-700 ml-3 whitespace-nowrap">{formatMoney(item.totalPrice || item.quantity * item.unitPrice)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                <div className="rounded-lg border border-gray-200">
+                  {/* Заголовок */}
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-200">
+                    <span className="text-sm font-semibold text-gray-900">Работы и материалы ({items.length})</span>
+                    <span className="text-sm font-bold text-gray-900">{formatMoney(totalLabor + totalParts)}</span>
+                  </div>
 
-                  {partItems.length > 0 && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-600 mb-1">Материалы ({partItems.length})</p>
-                      <div className="space-y-1">
-                        {partItems.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between rounded bg-gray-50 px-3 py-1.5 text-xs">
-                            <span className="text-gray-700 flex-1 mr-2">{item.description}</span>
-                            <span className="text-gray-500 whitespace-nowrap">{item.quantity} × {formatMoney(item.unitPrice)}</span>
-                            <span className="font-semibold text-gray-700 ml-3 whitespace-nowrap">{formatMoney(item.totalPrice || item.quantity * item.unitPrice)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                  {/* Табы */}
+                  <div className="flex border-b border-gray-200">
+                    <button
+                      onClick={() => setItemsTab('LABOR')}
+                      className={`flex-1 py-2 text-xs font-medium text-center border-b-2 transition ${
+                        itemsTab === 'LABOR'
+                          ? 'border-gray-900 text-gray-900'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Работы ({laborItems.length})
+                    </button>
+                    <button
+                      onClick={() => setItemsTab('PART')}
+                      className={`flex-1 py-2 text-xs font-medium text-center border-b-2 transition ${
+                        itemsTab === 'PART'
+                          ? 'border-gray-900 text-gray-900'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Материалы ({partItems.length})
+                    </button>
+                  </div>
 
-                  <div className="flex justify-end gap-4 rounded-lg bg-gray-50 px-4 py-2">
-                    {totalLabor > 0 && <div className="text-xs text-gray-500">Работы: <span className="font-semibold text-gray-700">{formatMoney(totalLabor)}</span></div>}
-                    {totalParts > 0 && <div className="text-xs text-gray-500">Материалы: <span className="font-semibold text-gray-700">{formatMoney(totalParts)}</span></div>}
-                    <div className="text-sm font-bold text-gray-900">Итого: {formatMoney(totalLabor + totalParts)}</div>
+                  {/* Таблица */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-gray-100 text-left text-gray-500">
+                          <th className="px-4 py-2 font-medium">Наименование</th>
+                          {itemsTab === 'LABOR' && <th className="px-2 py-2 font-medium text-right whitespace-nowrap">Норма</th>}
+                          {itemsTab === 'PART' && <th className="px-2 py-2 font-medium text-right">Кол-во</th>}
+                          <th className="px-2 py-2 font-medium text-right">Всего</th>
+                          <th className="px-4 py-2 font-medium text-right whitespace-nowrap">в т.ч. НДС</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeItems.map((item, idx) => {
+                          const total = item.totalPrice || item.quantity * item.unitPrice;
+                          const nds = total * 22 / 122;
+                          return (
+                            <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
+                              <td className="px-4 py-2 text-gray-700">{item.description}</td>
+                              {itemsTab === 'LABOR' && <td className="px-2 py-2 text-right text-gray-500">{item.normHours ?? item.quantity}</td>}
+                              {itemsTab === 'PART' && <td className="px-2 py-2 text-right text-gray-500">{item.quantity}</td>}
+                              <td className="px-2 py-2 text-right font-medium text-gray-700">{formatMoney(total)}</td>
+                              <td className="px-4 py-2 text-right text-gray-400">{formatMoney(nds)}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Итого */}
+                  <div className="flex items-center justify-end gap-4 px-4 py-2.5 border-t border-gray-200 bg-gray-50">
+                    {totalLabor > 0 && <span className="text-xs text-gray-500">Работы: <span className="font-semibold text-gray-700">{formatMoney(totalLabor)}</span></span>}
+                    {totalParts > 0 && <span className="text-xs text-gray-500">Материалы: <span className="font-semibold text-gray-700">{formatMoney(totalParts)}</span></span>}
+                    <span className="text-sm font-bold text-gray-900">Итого: {formatMoney(totalLabor + totalParts)}</span>
                   </div>
                 </div>
               );
