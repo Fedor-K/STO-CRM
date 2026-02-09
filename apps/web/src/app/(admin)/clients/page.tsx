@@ -740,6 +740,7 @@ interface AppointmentDetail {
   client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
+  workOrder: { id: string; orderNumber: string; status: string } | null;
 }
 
 function AppointmentDetailModal({
@@ -763,6 +764,16 @@ function AppointmentDetailModal({
   const { data: advisors } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
     queryKey: ['advisors-modal'],
     queryFn: () => apiFetch('/users?limit=50&role=RECEPTIONIST'),
+  });
+
+  // Если нет plannedItems, но есть привязанный ЗН — подтягиваем позиции из него
+  const woId = appointment?.workOrder?.id;
+  const hasPlannedItems = appointment?.plannedItems && appointment.plannedItems.length > 0;
+  const { data: woDetail } = useQuery<{ items: { type: string; description: string; quantity: number; unitPrice: string | number; totalPrice: string | number }[] }>({
+    queryKey: ['wo-items-for-appt', woId],
+    queryFn: () => apiFetch(`/work-orders/${woId}`),
+    enabled: !!woId && !hasPlannedItems,
+    staleTime: 60_000,
   });
 
   const [notes, setNotes] = useState('');
@@ -810,7 +821,7 @@ function AppointmentDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${appointment?.plannedItems?.length ? 'max-w-2xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
+      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${(appointment?.plannedItems?.length || woDetail?.items?.length) ? 'max-w-2xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-bold text-gray-900">Запись</h2>
@@ -919,10 +930,23 @@ function AppointmentDetailModal({
               </>
             )}
 
-            {/* Работы и материалы из plannedItems */}
-            {appointment.plannedItems && appointment.plannedItems.length > 0 && (() => {
-              const laborItems = appointment.plannedItems!.filter((i) => i.type === 'LABOR');
-              const partItems = appointment.plannedItems!.filter((i) => i.type === 'PART');
+            {/* Работы и материалы — из plannedItems или из ЗН */}
+            {(() => {
+              const items: { type: string; description: string; quantity: number; unitPrice: number; totalPrice: number }[] =
+                (appointment.plannedItems && appointment.plannedItems.length > 0)
+                  ? appointment.plannedItems
+                  : (woDetail?.items || []).map((i) => ({
+                      type: i.type,
+                      description: i.description,
+                      quantity: i.quantity,
+                      unitPrice: Number(i.unitPrice),
+                      totalPrice: Number(i.totalPrice),
+                    }));
+
+              if (items.length === 0) return null;
+
+              const laborItems = items.filter((i) => i.type === 'LABOR');
+              const partItems = items.filter((i) => i.type === 'PART');
               const totalLabor = laborItems.reduce((s, i) => s + (i.totalPrice || i.quantity * i.unitPrice), 0);
               const totalParts = partItems.reduce((s, i) => s + (i.totalPrice || i.quantity * i.unitPrice), 0);
 
