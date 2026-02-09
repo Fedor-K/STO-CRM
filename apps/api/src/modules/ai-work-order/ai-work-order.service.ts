@@ -212,7 +212,7 @@ export class AiWorkOrderService {
     }
     // Fallback: search by name if still not found
     // AI may swap firstName/lastName, so try both orientations
-    let candidateClients: { id: string; firstName: string; lastName: string; phone: string | null; middleName?: string | null }[] = [];
+    let candidateClients: { id: string; firstName: string; lastName: string; phone: string | null; middleName?: string | null; vehicles: { id: string; make: string; model: string; year: number | null; licensePlate: string | null; vin: string | null }[] }[] = [];
     if (!existingClient && (parsed.client?.lastName || parsed.client?.firstName)) {
       const ln = parsed.client.lastName?.trim();
       const fn = parsed.client.firstName?.trim();
@@ -229,7 +229,10 @@ export class AiWorkOrderService {
 
       const candidates = await this.prisma.user.findMany({
         where: { tenantId, role: 'CLIENT', OR: nameOrConditions },
-        select: { id: true, firstName: true, lastName: true, middleName: true, phone: true },
+        select: {
+          id: true, firstName: true, lastName: true, middleName: true, phone: true,
+          vehicles: { select: { id: true, make: true, model: true, year: true, licensePlate: true, vin: true }, orderBy: { updatedAt: 'desc' } },
+        },
         take: 10,
       });
 
@@ -286,6 +289,9 @@ export class AiWorkOrderService {
         lastName: c.lastName,
         middleName: c.middleName || null,
         phone: c.phone,
+        vehicles: c.vehicles.map((v) => ({
+          id: v.id, make: v.make, model: v.model, year: v.year, licensePlate: v.licensePlate, vin: v.vin,
+        })),
       })) : [],
       vehicle: {
         existingId: existingVehicle?.id || null,

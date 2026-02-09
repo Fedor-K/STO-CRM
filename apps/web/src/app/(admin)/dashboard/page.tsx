@@ -3470,12 +3470,22 @@ function SearchablePartSelect({
 
 type AiModalStep = 'input' | 'parsing' | 'preview' | 'creating' | 'done';
 
+interface AiCandidateVehicle {
+  id: string;
+  make: string;
+  model: string;
+  year: number | null;
+  licensePlate: string | null;
+  vin: string | null;
+}
+
 interface AiCandidateClient {
   id: string;
   firstName: string;
   lastName: string;
   middleName: string | null;
   phone: string | null;
+  vehicles: AiCandidateVehicle[];
 }
 
 interface AiParseResult {
@@ -3661,16 +3671,20 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                   onChange={(e) => {
                     const selected = preview.candidateClients.find((c) => c.id === e.target.value);
                     if (selected) {
+                      const firstVehicle = selected.vehicles[0];
                       setPreview({
                         ...preview,
                         client: { existingId: selected.id, firstName: selected.firstName, lastName: selected.lastName, phone: selected.phone, isNew: false },
+                        vehicle: firstVehicle
+                          ? { existingId: firstVehicle.id, make: firstVehicle.make, model: firstVehicle.model, year: firstVehicle.year, licensePlate: firstVehicle.licensePlate, vin: firstVehicle.vin, isNew: false }
+                          : { existingId: null, make: null, model: null, year: null, licensePlate: null, vin: null, isNew: true },
                       });
                     }
                   }}
                 >
                   {preview.candidateClients.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.lastName} {c.firstName}{c.middleName ? ` ${c.middleName}` : ''}{c.phone ? ` • ${c.phone}` : ''}
+                      {c.lastName} {c.firstName}{c.middleName ? ` ${c.middleName}` : ''}{c.phone ? ` • ${c.phone}` : ''}{c.vehicles.length > 0 ? ` — ${c.vehicles.map((v) => `${v.make} ${v.model}`).join(', ')}` : ''}
                     </option>
                   ))}
                 </select>
@@ -3682,7 +3696,10 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
             {/* Vehicle */}
             <div className="rounded-lg border border-gray-200 p-3">
               <h3 className="mb-2 text-sm font-semibold text-gray-700">
-                Автомобиль {preview.vehicle.isNew ? <span className="text-xs font-normal text-green-600">(новый)</span> : <span className="text-xs font-normal text-blue-600">(найден в базе)</span>}
+                Автомобиль {preview.vehicle.isNew ? <span className="text-xs font-normal text-green-600">(новый)</span> : (() => {
+                  const sel = preview.candidateClients.find((c) => c.id === preview.client.existingId);
+                  return sel && sel.vehicles.length > 1 ? <span className="text-xs font-normal text-amber-600">(выберите)</span> : <span className="text-xs font-normal text-blue-600">(найден в базе)</span>;
+                })()}
               </h3>
               {preview.vehicle.isNew ? (
                 <div className="grid grid-cols-4 gap-2">
@@ -3691,11 +3708,38 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                   <input value={editYear} onChange={(e) => setEditYear(e.target.value)} placeholder="Год" className="rounded border border-gray-300 px-2 py-1 text-sm" />
                   <input value={editPlate} onChange={(e) => setEditPlate(e.target.value)} placeholder="Госномер" className="rounded border border-gray-300 px-2 py-1 text-sm" />
                 </div>
-              ) : (
-                <p className="text-sm text-gray-600">
-                  {preview.vehicle.make} {preview.vehicle.model} {preview.vehicle.year && `(${preview.vehicle.year})`} {preview.vehicle.licensePlate && `• ${preview.vehicle.licensePlate}`}
-                </p>
-              )}
+              ) : (() => {
+                const sel = preview.candidateClients.find((c) => c.id === preview.client.existingId);
+                const vehicles = sel?.vehicles || [];
+                if (vehicles.length > 1) {
+                  return (
+                    <select
+                      className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                      value={preview.vehicle.existingId || ''}
+                      onChange={(e) => {
+                        const v = vehicles.find((veh) => veh.id === e.target.value);
+                        if (v) {
+                          setPreview({
+                            ...preview,
+                            vehicle: { existingId: v.id, make: v.make, model: v.model, year: v.year, licensePlate: v.licensePlate, vin: v.vin, isNew: false },
+                          });
+                        }
+                      }}
+                    >
+                      {vehicles.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.make} {v.model}{v.year ? ` (${v.year})` : ''}{v.licensePlate ? ` • ${v.licensePlate}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  );
+                }
+                return (
+                  <p className="text-sm text-gray-600">
+                    {preview.vehicle.make} {preview.vehicle.model} {preview.vehicle.year && `(${preview.vehicle.year})`} {preview.vehicle.licensePlate && `• ${preview.vehicle.licensePlate}`}
+                  </p>
+                );
+              })()}
             </div>
 
             {/* Complaints */}
