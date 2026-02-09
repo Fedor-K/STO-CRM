@@ -3517,6 +3517,7 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
   const [editComplaints, setEditComplaints] = useState('');
   const [selectedServices, setSelectedServices] = useState<boolean[]>([]);
   const [selectedParts, setSelectedParts] = useState<boolean[]>([]);
+  const [adjusting, setAdjusting] = useState(false);
 
   async function handleParse() {
     if (!description.trim()) return;
@@ -3591,6 +3592,37 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
     } catch (err: any) {
       setError(err.message || 'Ошибка создания');
       setStep('preview');
+    }
+  }
+
+  async function handleAdjust(vehicle: { make: string; model: string; year: number | null }) {
+    if (!preview) return;
+    setAdjusting(true);
+    try {
+      const result = await apiFetch<{
+        suggestedServices: { serviceId: string; name: string; price: number; normHours: number }[];
+        suggestedParts: { partId: string; name: string; sellPrice: number; quantity: number; inStock: boolean }[];
+        explanation: string;
+      }>('/ai-work-order/adjust', {
+        method: 'POST',
+        body: JSON.stringify({
+          vehicle: { make: vehicle.make, model: vehicle.model, year: vehicle.year || undefined },
+          complaint: editComplaints,
+          currentServices: preview.suggestedServices.map((s) => ({ serviceId: s.serviceId, name: s.name })),
+          currentParts: preview.suggestedParts.map((p) => ({ partId: p.partId, name: p.name })),
+        }),
+      });
+      setPreview({
+        ...preview,
+        suggestedServices: result.suggestedServices,
+        suggestedParts: result.suggestedParts,
+      });
+      setSelectedServices(result.suggestedServices.map(() => true));
+      setSelectedParts(result.suggestedParts.map(() => true));
+    } catch {
+      // ignore — keep current suggestions
+    } finally {
+      setAdjusting(false);
     }
   }
 
@@ -3679,6 +3711,7 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                           ? { existingId: firstVehicle.id, make: firstVehicle.make, model: firstVehicle.model, year: firstVehicle.year, licensePlate: firstVehicle.licensePlate, vin: firstVehicle.vin, isNew: false }
                           : { existingId: null, make: null, model: null, year: null, licensePlate: null, vin: null, isNew: true },
                       });
+                      if (firstVehicle) handleAdjust(firstVehicle);
                     }
                   }}
                 >
@@ -3723,6 +3756,7 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                             ...preview,
                             vehicle: { existingId: v.id, make: v.make, model: v.model, year: v.year, licensePlate: v.licensePlate, vin: v.vin, isNew: false },
                           });
+                          handleAdjust(v);
                         }
                       }}
                     >
@@ -3755,8 +3789,8 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 
             {/* Services */}
             {preview.suggestedServices.length > 0 && (
-              <div className="rounded-lg border border-gray-200 p-3">
-                <h3 className="mb-2 text-sm font-semibold text-gray-700">Услуги</h3>
+              <div className={`rounded-lg border border-gray-200 p-3 ${adjusting ? 'opacity-50' : ''}`}>
+                <h3 className="mb-2 text-sm font-semibold text-gray-700">Услуги {adjusting && <span className="text-xs font-normal text-amber-600 animate-pulse">корректировка...</span>}</h3>
                 <div className="space-y-1">
                   {preview.suggestedServices.map((s, i) => (
                     <label key={s.serviceId} className="flex items-center gap-2 text-sm">
@@ -3780,8 +3814,8 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
 
             {/* Parts */}
             {preview.suggestedParts.length > 0 && (
-              <div className="rounded-lg border border-gray-200 p-3">
-                <h3 className="mb-2 text-sm font-semibold text-gray-700">Запчасти</h3>
+              <div className={`rounded-lg border border-gray-200 p-3 ${adjusting ? 'opacity-50' : ''}`}>
+                <h3 className="mb-2 text-sm font-semibold text-gray-700">Запчасти {adjusting && <span className="text-xs font-normal text-amber-600 animate-pulse">корректировка...</span>}</h3>
                 <div className="space-y-1">
                   {preview.suggestedParts.map((p, i) => (
                     <label key={p.partId} className="flex items-center gap-2 text-sm">

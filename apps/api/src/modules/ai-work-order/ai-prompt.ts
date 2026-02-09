@@ -32,3 +32,46 @@ ${mechLines || '(пусто)'}
 Ответ СТРОГО JSON без markdown:
 {"client":{"firstName":"str|null","lastName":"str|null","phone":"str|null"},"vehicle":{"make":"str|null","model":"str|null","year":"num|null","licensePlate":"str|null","vin":"str|null"},"clientComplaints":"str","suggestedServices":[{"serviceId":"uuid","name":"str","price":0,"normHours":0}],"suggestedParts":[{"partId":"uuid","name":"str","sellPrice":0,"quantity":1}],"suggestedMechanicId":"uuid|null"}`;
 }
+
+export function buildAdjustPrompt(
+  vehicle: { make: string; model: string; year: number | null },
+  complaint: string,
+  currentServices: { serviceId: string; name: string }[],
+  currentParts: { partId: string; name: string }[],
+  services: { id: string; name: string; price: number; normHours: number | null }[],
+  parts: { id: string; name: string; sellPrice: number; currentStock: number }[],
+): string {
+  const svcLines = services.map((s) => `${s.id}|${s.name}|${s.price}|${s.normHours ?? ''}`).join('\n');
+  const partLines = parts.map((p) => `${p.id}|${p.name}|${p.sellPrice}|${p.currentStock}`).join('\n');
+
+  const curSvc = currentServices.map((s) => `${s.serviceId}|${s.name}`).join('\n');
+  const curParts = currentParts.map((p) => `${p.partId}|${p.name}`).join('\n');
+
+  return `Ты — AI-ассистент автосервиса. Пользователь сменил автомобиль. Скорректируй подобранные услуги и запчасти с учётом конкретного авто.
+
+АВТОМОБИЛЬ: ${vehicle.make} ${vehicle.model}${vehicle.year ? ` ${vehicle.year}` : ''}
+ЖАЛОБА: ${complaint}
+
+ТЕКУЩИЕ УСЛУГИ:
+${curSvc || '(пусто)'}
+
+ТЕКУЩИЕ ЗАПЧАСТИ:
+${curParts || '(пусто)'}
+
+ПРАВИЛА:
+1. Определи тип КПП автомобиля по марке/модели (МКПП, АКПП, вариатор, робот, DSG, и т.д.)
+2. Если жалоба связана со сцеплением, а у авто АКПП/вариатор (нет сцепления) — замени на диагностику АКПП, убери запчасти сцепления
+3. Если жалоба связана с КПП и у авто МКПП/робот — оставь диагностику КПП и запчасти сцепления
+4. Аналогично для других систем: подбирай услуги и запчасти, подходящие именно для этого авто
+5. Бери услуги и запчасти ТОЛЬКО из каталогов ниже (по id)
+6. Не меняй то, что уже корректно подобрано
+
+КАТАЛОГ УСЛУГ (id|название|цена|нормочасы):
+${svcLines || '(пусто)'}
+
+КАТАЛОГ ЗАПЧАСТЕЙ (id|название|цена|остаток):
+${partLines || '(пусто)'}
+
+Ответ СТРОГО JSON без markdown:
+{"suggestedServices":[{"serviceId":"uuid","name":"str","price":0,"normHours":0}],"suggestedParts":[{"partId":"uuid","name":"str","sellPrice":0,"quantity":1}],"explanation":"краткое пояснение что изменилось и почему"}`;
+}

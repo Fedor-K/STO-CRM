@@ -7,7 +7,7 @@ import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { UsersService } from '../users/users.service';
 import { VehiclesService } from '../vehicles/vehicles.service';
-import { buildSystemPrompt } from './ai-prompt';
+import { buildSystemPrompt, buildAdjustPrompt } from './ai-prompt';
 
 interface ParsedAiResult {
   client: {
@@ -434,5 +434,120 @@ export class AiWorkOrderService {
 
     // Return appointment with full data for frontend
     return this.appointmentsService.findById(tenantId, appointment.id);
+  }
+
+  async adjust(
+    tenantId: string,
+    data: {
+      vehicle: { make: string; model: string; year?: number };
+      complaint: string;
+      currentServices: { serviceId: string; name: string }[];
+      currentParts: { partId: string; name: string }[];
+    },
+  ) {
+    if (!this.configService.get<string>('ANTHROPIC_API_KEY')) {
+      throw new BadRequestException('AI-функция не настроена');
+    }
+
+    // Load catalogs (filtered by complaint keywords)
+    const keywords = data.complaint
+      .toLowerCase()
+      .replace(/[^а-яёa-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 3);
+    const uniqueKeywords = [...new Set(keywords)];
+
+    const keywordFilter = uniqueKeywords.length > 0
+      ? { OR: uniqueKeywords.map((kw) => ({ name: { contains: kw, mode: 'insensitive' as const } })) }
+      : {};
+
+    const [services, topServices, parts, topParts] = await Promise.all([
+      this.prisma.service.findMany({
+        where: { tenantId, isActive: true, ...keywordFilter },
+        select: { id: true, name: true, price: true, normHours: true },
+        take: 150,
+      }),
+      this.prisma.service.findMany({
+        where: { tenantId, isActive: true, OR: [
+          { name: { contains: 'диагностик', mode: 'insensitive' } },
+          { name: { contains: 'КПП', mode: 'insensitive' } },
+          { name: { contains: 'АКПП', mode: 'insensitive' } },
+          { name: { contains: 'сцепление', mode: 'insensitive' } },
+        ]},
+        select: { id: true, name: true, price: true, normHours: true },
+        take: 50,
+      }),
+      this.prisma.part.findMany({
+        where: { tenantId, ...keywordFilter },
+        select: { id: true, name: true, brand: true, sellPrice: true, currentStock: true },
+        take: 200,
+      }),
+      this.prisma.part.findMany({
+        where: { tenantId, currentStock: { gt: 0 } },
+        select: { id: true, name: true, brand: true, sellPrice: true, currentStock: true },
+        orderBy: { currentStock: 'desc' },
+        take: 50,
+      }),
+    ]);
+
+    const svcMap = new Map<string, typeof services[0]>();
+    for (const s of [...services, ...topServices]) svcMap.set(s.id, s);
+    const allServices = [...svcMap.values()];
+
+    const partMap = new Map<string, typeof parts[0]>();
+    for (const p of [...parts, ...topParts]) partMap.set(p.id, p);
+    const allParts = [...partMap.values()];
+
+    const prompt = buildAdjustPrompt(
+      { make: data.vehicle.make, model: data.vehicle.model, year: data.vehicle.year || null },
+      data.complaint,
+      data.currentServices,
+      data.currentParts,
+      allServices.map((s) => ({ ...s, price: Number(s.price), normHours: s.normHours ? Number(s.normHours) : null })),
+      allParts.map((p) => ({ ...p, sellPrice: Number(p.sellPrice) })),
+    );
+
+    const message = await this.anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system: prompt,
+      messages: [{ role: 'user', content: `Автомобиль: ${data.vehicle.make} ${data.vehicle.model}. Жалоба: ${data.complaint}. Скорректируй.` }],
+    });
+
+    const textBlock = message.content.find((b) => b.type === 'text');
+    if (!textBlock || textBlock.type !== 'text') {
+      throw new BadRequestException('AI не вернул ответ');
+    }
+
+    let parsed: any;
+    try {
+      let jsonText = textBlock.text.trim();
+      if (jsonText.startsWith('```')) {
+        jsonText = jsonText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+      }
+      parsed = JSON.parse(jsonText);
+    } catch {
+      this.logger.error(`AI adjust вернул невалидный JSON: ${textBlock.text}`);
+      throw new BadRequestException('AI вернул невалидный ответ');
+    }
+
+    // Validate IDs
+    const serviceIds = new Set(allServices.map((s) => s.id));
+    const partIds = new Set(allParts.map((p) => p.id));
+
+    const validServices = (parsed.suggestedServices || []).filter((s: any) => serviceIds.has(s.serviceId));
+    const validParts = (parsed.suggestedParts || []).filter((p: any) => partIds.has(p.partId));
+
+    return {
+      suggestedServices: validServices.map((s: any) => {
+        const svc = allServices.find((sv) => sv.id === s.serviceId);
+        return { serviceId: s.serviceId, name: svc?.name || s.name, price: Number(svc?.price ?? s.price), normHours: svc?.normHours ? Number(svc.normHours) : s.normHours };
+      }),
+      suggestedParts: validParts.map((p: any) => {
+        const part = allParts.find((pt) => pt.id === p.partId);
+        return { partId: p.partId, name: part?.name || p.name, sellPrice: Number(part?.sellPrice ?? p.sellPrice), quantity: p.quantity || 1, inStock: (part?.currentStock ?? 0) >= (p.quantity || 1) };
+      }),
+      explanation: parsed.explanation || '',
+    };
   }
 }

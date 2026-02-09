@@ -118,6 +118,54 @@ class CreateFromAiDto {
   mechanicId?: string;
 }
 
+class AdjustVehicleDto {
+  @IsString()
+  make!: string;
+
+  @IsString()
+  model!: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  year?: number;
+}
+
+class AdjustCurrentServiceDto {
+  @IsUUID()
+  serviceId!: string;
+
+  @IsString()
+  name!: string;
+}
+
+class AdjustCurrentPartDto {
+  @IsUUID()
+  partId!: string;
+
+  @IsString()
+  name!: string;
+}
+
+class AdjustDto {
+  @ValidateNested()
+  @Type(() => AdjustVehicleDto)
+  vehicle!: AdjustVehicleDto;
+
+  @IsString()
+  complaint!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AdjustCurrentServiceDto)
+  currentServices!: AdjustCurrentServiceDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => AdjustCurrentPartDto)
+  currentParts!: AdjustCurrentPartDto[];
+}
+
 // --- Controller ---
 
 @ApiTags('AI Work Order')
@@ -145,5 +193,15 @@ export class AiWorkOrderController {
     @Body() dto: CreateFromAiDto,
   ) {
     return this.aiWorkOrderService.create(tenantId, dto, user.id);
+  }
+
+  @Post('adjust')
+  @Roles('work-orders:create')
+  @ApiOperation({ summary: 'Корректировка услуг/запчастей при смене автомобиля' })
+  async adjust(
+    @CurrentTenant() tenantId: string,
+    @Body() dto: AdjustDto,
+  ) {
+    return this.aiWorkOrderService.adjust(tenantId, dto);
   }
 }
