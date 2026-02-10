@@ -20,8 +20,9 @@ class CreateUserDto {
   @IsString()
   firstName!: string;
 
+  @IsOptional()
   @IsString()
-  lastName!: string;
+  lastName?: string;
 
   @IsOptional()
   @IsString()

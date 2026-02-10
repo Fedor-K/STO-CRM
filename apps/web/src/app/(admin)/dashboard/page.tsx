@@ -646,8 +646,8 @@ function CreateAppointmentModal({
 
       // 1. Create new client if needed
       if (isNewClient) {
-        if (!newLastName || !newFirstName || !newPhone) {
-          setError('Заполните фамилию, имя и телефон нового клиента');
+        if (!newFirstName || !newPhone) {
+          setError('Заполните имя и телефон нового клиента');
           setSaving(false);
           return;
         }
@@ -657,7 +657,7 @@ function CreateAppointmentModal({
           method: 'POST',
           body: JSON.stringify({
             firstName: newFirstName,
-            lastName: newLastName,
+            lastName: newLastName || undefined,
             middleName: newMiddleName || undefined,
             dateOfBirth: newDateOfBirth || undefined,
             phone: newPhone,
@@ -754,18 +754,17 @@ function CreateAppointmentModal({
               <div className="mt-2 space-y-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3">
                 <div className="grid grid-cols-3 gap-2">
                   <input
-                    placeholder="Фамилия *"
-                    value={newLastName}
-                    onChange={(e) => setNewLastName(e.target.value)}
-                    className={inputCls}
-                    required
-                  />
-                  <input
                     placeholder="Имя *"
                     value={newFirstName}
                     onChange={(e) => setNewFirstName(e.target.value)}
                     className={inputCls}
                     required
+                  />
+                  <input
+                    placeholder="Фамилия"
+                    value={newLastName}
+                    onChange={(e) => setNewLastName(e.target.value)}
+                    className={inputCls}
                   />
                   <input
                     placeholder="Отчество"

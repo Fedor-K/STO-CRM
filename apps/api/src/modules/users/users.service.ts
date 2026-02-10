@@ -84,7 +84,7 @@ export class UsersService {
       password: string;
       role: UserRole;
       firstName: string;
-      lastName: string;
+      lastName?: string;
       middleName?: string;
       dateOfBirth?: string;
       phone?: string;
@@ -110,7 +110,7 @@ export class UsersService {
         passwordHash,
         role: data.role,
         firstName: data.firstName,
-        lastName: data.lastName,
+        lastName: data.lastName || '',
         middleName: data.middleName,
         dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : undefined,
         phone: data.phone,
