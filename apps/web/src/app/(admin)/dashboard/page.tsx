@@ -3513,7 +3513,7 @@ function SearchablePartSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const { data } = useQuery<{ data: { id: string; name: string; sellPrice: string | number; brand: string | null; sku: string | null; currentStock: number }[] }>({
+  const { data } = useQuery<{ data: { id: string; name: string; sellPrice: string | number; brand: string | null; manufacturer: string | null; sku: string | null; currentStock: number }[] }>({
     queryKey: ['parts-search', debouncedSearch],
     queryFn: () => apiFetch(`/parts?limit=20&sort=name&order=asc&search=${encodeURIComponent(debouncedSearch)}`),
     enabled: debouncedSearch.length >= 2,
@@ -3542,11 +3542,11 @@ function SearchablePartSelect({
             <button
               key={p.id}
               type="button"
-              onClick={() => { onSelect(p); setSearch(''); setShowDropdown(false); }}
+              onClick={() => { onSelect({ ...p, brand: p.manufacturer || p.brand }); setSearch(''); setShowDropdown(false); }}
               className="grid w-full grid-cols-[1fr_minmax(80px,auto)_auto_auto_auto] gap-2 px-3 py-2 text-left hover:bg-primary-50"
             >
               <span className="text-sm text-gray-900 truncate">{p.name}</span>
-              <span className="text-xs text-gray-500 truncate">{p.brand || '—'}</span>
+              <span className="text-xs text-gray-500 truncate">{p.manufacturer || p.brand || '—'}</span>
               <span className="w-28 truncate text-right text-xs text-gray-400">{p.sku || '—'}</span>
               <span className={`w-16 text-center text-xs font-medium ${p.currentStock > 0 ? 'text-green-600' : 'text-red-500'}`}>{p.currentStock ?? 0}</span>
               <span className="w-24 text-right text-xs text-gray-500 whitespace-nowrap">{formatMoney(p.sellPrice)}</span>
