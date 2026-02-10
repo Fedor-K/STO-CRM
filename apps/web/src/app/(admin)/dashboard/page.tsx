@@ -416,7 +416,7 @@ function AppointmentFunnelCard({
   }
 
   const actionLabel = column === 'appeal' ? 'На согласование →' : column === 'scheduled' ? 'Создать ЗН →' : null;
-  const isOverdue = appointment.reminderAt && new Date(appointment.reminderAt) < new Date();
+  const isOverdue = column === 'estimating' && appointment.reminderAt && new Date(appointment.reminderAt) < new Date();
 
   return (
     <div

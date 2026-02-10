@@ -107,6 +107,8 @@ export class AppointmentsService {
     const data: any = { status };
     if (status === 'ESTIMATING') {
       data.reminderAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    } else if (existing.status === 'ESTIMATING') {
+      data.reminderAt = null;
     }
     if (status === 'CANCELLED') {
       data.cancelledFrom = existing.status;
