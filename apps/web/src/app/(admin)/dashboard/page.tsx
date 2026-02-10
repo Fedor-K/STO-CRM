@@ -1428,8 +1428,9 @@ function AppointmentDetailModal({
                                         value={Math.round(item.unitPrice * item.quantity)}
                                         onChange={(e) => {
                                           const total = Number(e.target.value) || 0;
-                                          const qty = item.quantity || 1;
-                                          handleUpdatePlannedItem(idx, 'unitPrice', Math.round((total / qty) * 100) / 100);
+                                          const price = item.unitPrice || 1;
+                                          const newQty = Math.round((total / price) * 100) / 100;
+                                          handleUpdatePlannedItem(idx, 'quantity', newQty);
                                         }}
                                         className="w-28 rounded border border-gray-200 px-2 py-0.5 text-right text-xs font-medium text-gray-700 focus:border-primary-500 focus:outline-none"
                                       />
@@ -1533,8 +1534,8 @@ function AppointmentDetailModal({
                                         value={Math.round(item.unitPrice * item.quantity)}
                                         onChange={(e) => {
                                           const total = Number(e.target.value) || 0;
-                                          const qty = item.quantity || 1;
-                                          handleUpdatePlannedItem(idx, 'unitPrice', Math.round((total / qty) * 100) / 100);
+                                          const price = item.unitPrice || 1;
+                                          handleUpdatePlannedItem(idx, 'quantity', Math.round((total / price) * 100) / 100);
                                         }}
                                         className="w-28 rounded border border-gray-200 px-2 py-0.5 text-right text-xs font-medium text-gray-700 focus:border-primary-500 focus:outline-none"
                                       />
