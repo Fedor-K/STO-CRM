@@ -1030,6 +1030,7 @@ interface PlannedItem {
   normHours?: number;
   serviceId?: string;
   partId?: string;
+  brand?: string | null;
 }
 
 function AppointmentDetailModal({
@@ -1167,6 +1168,7 @@ function AppointmentDetailModal({
       quantity: Number(partQty) || 1,
       unitPrice: Number(selectedPart.sellPrice),
       partId: selectedPart.id,
+      brand: selectedPart.brand,
     }]);
     setSelectedPart(null);
     setPartQty('1');
@@ -1175,6 +1177,10 @@ function AppointmentDetailModal({
 
   function handleRemovePlannedItem(idx: number) {
     setPlannedItems(plannedItems.filter((_, i) => i !== idx));
+  }
+
+  function handleUpdatePlannedItem(idx: number, field: keyof PlannedItem, value: number) {
+    setPlannedItems(plannedItems.map((item, i) => i === idx ? { ...item, [field]: value } : item));
   }
 
   async function handleSaveAppointment() {
@@ -1388,7 +1394,8 @@ function AppointmentDetailModal({
                               <tr className="border-b border-gray-100 text-left text-gray-500">
                                 <th className="pb-1 font-medium">Наименование</th>
                                 <th className="pb-1 font-medium text-right w-16">Норма</th>
-                                <th className="pb-1 font-medium text-right w-20">Всего</th>
+                                <th className="pb-1 font-medium text-right w-28">Цена</th>
+                                <th className="pb-1 font-medium text-right w-24">Всего</th>
                                 <th className="pb-1 font-medium text-right">в т.ч. НДС</th>
                                 {column === 'estimating' && <th className="pb-1 w-6"></th>}
                               </tr>
@@ -1398,6 +1405,20 @@ function AppointmentDetailModal({
                                 <tr key={idx} className="border-b border-gray-50">
                                   <td className="py-1.5 text-gray-700">{item.description}</td>
                                   <td className="py-1.5 text-right text-gray-600">{item.normHours ?? item.quantity}</td>
+                                  <td className="py-1.5 text-right">
+                                    {column === 'estimating' ? (
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step={100}
+                                        value={item.unitPrice}
+                                        onChange={(e) => handleUpdatePlannedItem(idx, 'unitPrice', Number(e.target.value) || 0)}
+                                        className="w-24 rounded border border-gray-200 px-2 py-0.5 text-right text-xs text-gray-700 focus:border-primary-500 focus:outline-none"
+                                      />
+                                    ) : (
+                                      <span className="text-gray-600">{formatMoney(item.unitPrice)}</span>
+                                    )}
+                                  </td>
                                   <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
                                   <td className="py-1.5 text-right text-gray-400">{formatVat(item.unitPrice * item.quantity)}</td>
                                   {column === 'estimating' && (
@@ -1450,9 +1471,11 @@ function AppointmentDetailModal({
                             <thead>
                               <tr className="border-b border-gray-100 text-left text-gray-500">
                                 <th className="pb-1 font-medium">Наименование</th>
+                                <th className="pb-1 font-medium">Производитель</th>
                                 <th className="pb-1 font-medium text-right w-16">Кол-во</th>
                                 <th className="pb-1 font-medium text-right w-16">Остаток</th>
-                                <th className="pb-1 font-medium text-right w-20">Всего</th>
+                                <th className="pb-1 font-medium text-right w-28">Цена</th>
+                                <th className="pb-1 font-medium text-right w-24">Всего</th>
                                 <th className="pb-1 font-medium text-right">в т.ч. НДС</th>
                                 {column === 'estimating' && <th className="pb-1 w-6"></th>}
                               </tr>
@@ -1465,9 +1488,24 @@ function AppointmentDetailModal({
                                 return (
                                 <tr key={idx} className="border-b border-gray-50">
                                   <td className="py-1.5 text-gray-700">{item.description}</td>
+                                  <td className="py-1.5 text-gray-500 text-xs">{item.brand || '—'}</td>
                                   <td className="py-1.5 text-right text-gray-600">{item.quantity}</td>
                                   <td className={`py-1.5 text-right font-medium ${outOfStock ? 'text-red-600' : 'text-green-600'}`}>
                                     {stock !== undefined ? stock : '—'}
+                                  </td>
+                                  <td className="py-1.5 text-right">
+                                    {column === 'estimating' ? (
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step={10}
+                                        value={item.unitPrice}
+                                        onChange={(e) => handleUpdatePlannedItem(idx, 'unitPrice', Number(e.target.value) || 0)}
+                                        className="w-24 rounded border border-gray-200 px-2 py-0.5 text-right text-xs text-gray-700 focus:border-primary-500 focus:outline-none"
+                                      />
+                                    ) : (
+                                      <span className="text-gray-600">{formatMoney(item.unitPrice)}</span>
+                                    )}
                                   </td>
                                   <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
                                   <td className="py-1.5 text-right text-gray-400">{formatVat(item.unitPrice * item.quantity)}</td>
