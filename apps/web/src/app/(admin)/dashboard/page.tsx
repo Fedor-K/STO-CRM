@@ -1419,7 +1419,24 @@ function AppointmentDetailModal({
                                       <span className="text-gray-600">{formatMoney(item.unitPrice)}</span>
                                     )}
                                   </td>
-                                  <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
+                                  <td className="py-1.5 text-right font-medium text-gray-700">
+                                    {column === 'estimating' ? (
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step={100}
+                                        value={Math.round(item.unitPrice * item.quantity)}
+                                        onChange={(e) => {
+                                          const total = Number(e.target.value) || 0;
+                                          const qty = item.quantity || 1;
+                                          handleUpdatePlannedItem(idx, 'unitPrice', Math.round((total / qty) * 100) / 100);
+                                        }}
+                                        className="w-28 rounded border border-gray-200 px-2 py-0.5 text-right text-xs font-medium text-gray-700 focus:border-primary-500 focus:outline-none"
+                                      />
+                                    ) : (
+                                      formatMoney(item.unitPrice * item.quantity)
+                                    )}
+                                  </td>
                                   <td className="py-1.5 text-right text-gray-400">{formatVat(item.unitPrice * item.quantity)}</td>
                                   {column === 'estimating' && (
                                     <td className="py-1.5 text-right">
@@ -1507,7 +1524,24 @@ function AppointmentDetailModal({
                                       <span className="text-gray-600">{formatMoney(item.unitPrice)}</span>
                                     )}
                                   </td>
-                                  <td className="py-1.5 text-right font-medium text-gray-700">{formatMoney(item.unitPrice * item.quantity)}</td>
+                                  <td className="py-1.5 text-right font-medium text-gray-700">
+                                    {column === 'estimating' ? (
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step={10}
+                                        value={Math.round(item.unitPrice * item.quantity)}
+                                        onChange={(e) => {
+                                          const total = Number(e.target.value) || 0;
+                                          const qty = item.quantity || 1;
+                                          handleUpdatePlannedItem(idx, 'unitPrice', Math.round((total / qty) * 100) / 100);
+                                        }}
+                                        className="w-28 rounded border border-gray-200 px-2 py-0.5 text-right text-xs font-medium text-gray-700 focus:border-primary-500 focus:outline-none"
+                                      />
+                                    ) : (
+                                      formatMoney(item.unitPrice * item.quantity)
+                                    )}
+                                  </td>
                                   <td className="py-1.5 text-right text-gray-400">{formatVat(item.unitPrice * item.quantity)}</td>
                                   {column === 'estimating' && (
                                     <td className="py-1.5 text-right">
