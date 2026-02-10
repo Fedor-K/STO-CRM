@@ -245,7 +245,7 @@ export class AiWorkOrderService {
     const complaint = parsed.clientComplaints || description;
     let spravochnikUsed = false;
     let finalServices: { serviceId: string; name: string; price: number; normHours: number; usageCount?: number }[] = [];
-    let finalParts: { partId: string; name: string; sellPrice: number; quantity: number; inStock: boolean; usageCount?: number }[] = [];
+    let finalParts: { partId: string; name: string; sku: string | null; sellPrice: number; quantity: number; inStock: boolean; usageCount?: number }[] = [];
 
     if (vehicleMake && vehicleModel) {
       try {
@@ -275,6 +275,7 @@ export class AiWorkOrderService {
           finalParts = [...uniqueParts.values()].map((p) => ({
             partId: p.partId!,
             name: p.partName,
+            sku: p.partSku || null,
             sellPrice: p.currentPrice,
             quantity: 1,
             inStock: p.currentStock > 0,
@@ -473,6 +474,7 @@ export class AiWorkOrderService {
           suggestedParts: [...uniqueParts.values()].map((p) => ({
             partId: p.partId!,
             name: p.partName,
+            sku: p.partSku || null,
             sellPrice: p.currentPrice,
             quantity: 1,
             inStock: p.currentStock > 0,

@@ -244,7 +244,7 @@ export class SpravochnikService implements OnModuleInit {
       uniquePartIds.length > 0
         ? await this.prisma.part.findMany({
             where: { id: { in: uniquePartIds }, tenantId },
-            select: { id: true, name: true, sellPrice: true, currentStock: true, isActive: true },
+            select: { id: true, name: true, sku: true, sellPrice: true, currentStock: true, isActive: true },
           })
         : [];
     const partMap = new Map(catalogParts.map((p) => [p.id, p]));
@@ -287,7 +287,7 @@ export class SpravochnikService implements OnModuleInit {
           return {
             partId: p.partId,
             partName: realPart?.name || p.partName,
-            partSku: p.partSku,
+            partSku: realPart?.sku || p.partSku,
             partBrand: p.partBrand,
             avgPrice: Number(p.avgPrice),
             usageCount: Number(p.usageCount),

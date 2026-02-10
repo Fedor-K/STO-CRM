@@ -3494,7 +3494,7 @@ interface AiParseResult {
   vehicle: { existingId: string | null; make: string | null; model: string | null; year: number | null; licensePlate: string | null; vin: string | null; isNew: boolean };
   clientComplaints: string;
   suggestedServices: { serviceId: string; name: string; price: number; normHours: number; usageCount?: number }[];
-  suggestedParts: { partId: string; name: string; sellPrice: number; quantity: number; inStock: boolean; usageCount?: number }[];
+  suggestedParts: { partId: string; name: string; sku?: string | null; sellPrice: number; quantity: number; inStock: boolean; usageCount?: number }[];
   suggestedMechanic: { mechanicId: string; firstName: string; lastName: string; activeOrdersCount: number } | null;
   spravochnikUsed?: boolean;
 }
@@ -3837,10 +3837,13 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                         }}
                         className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                       />
-                      <span className="flex-1 truncate">{p.name} {p.quantity > 1 && `x${p.quantity}`}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="truncate block">{p.name} {p.quantity > 1 && `x${p.quantity}`}</span>
+                        {p.sku && <span className="text-xs text-gray-400">{p.sku}</span>}
+                      </div>
                       {p.usageCount && <span className="whitespace-nowrap text-xs text-emerald-600">{p.usageCount}x</span>}
                       <span className="whitespace-nowrap text-gray-500">{formatMoney(p.sellPrice)}</span>
-                      {!p.inStock && <span className="text-xs text-red-500">нет на складе</span>}
+                      {!p.inStock && <span className="text-xs text-red-500 whitespace-nowrap">нет на складе</span>}
                     </label>
                   ))}
                 </div>
