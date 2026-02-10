@@ -601,6 +601,20 @@ function CreateAppointmentModal({
     return () => clearTimeout(t);
   }, [clientSearch]);
 
+  // Phone duplicate check for new client
+  const [debouncedPhone, setDebouncedPhone] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPhone(newPhone), 500);
+    return () => clearTimeout(t);
+  }, [newPhone]);
+  const { data: phoneMatch } = useQuery<{ data: { id: string; firstName: string; lastName: string; middleName: string | null; phone: string | null }[] }>({
+    queryKey: ['phone-check', debouncedPhone],
+    queryFn: () => apiFetch(`/users?limit=1&role=CLIENT&search=${encodeURIComponent(debouncedPhone)}`),
+    enabled: isNewClient && debouncedPhone.length >= 5,
+    staleTime: 10_000,
+  });
+  const foundByPhone = phoneMatch?.data?.[0] || null;
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (clientDropdownRef.current && !clientDropdownRef.current.contains(e.target as Node)) {
@@ -789,6 +803,30 @@ function CreateAppointmentModal({
                   className={inputCls}
                   required
                 />
+                {foundByPhone && (
+                  <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+                    <span className="text-xs text-blue-800">
+                      Найден: <strong>{foundByPhone.lastName} {foundByPhone.firstName}{foundByPhone.middleName ? ` ${foundByPhone.middleName}` : ''}</strong> ({foundByPhone.phone})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsNewClient(false);
+                        setClientId(foundByPhone.id);
+                        setClientLabel(`${foundByPhone.lastName} ${foundByPhone.firstName}${foundByPhone.middleName ? ` ${foundByPhone.middleName}` : ''}${foundByPhone.phone ? ` (${foundByPhone.phone})` : ''}`);
+                        setNewPhone('');
+                        setNewFirstName('');
+                        setNewLastName('');
+                        setNewMiddleName('');
+                        setNewEmail('');
+                        setNewDateOfBirth('');
+                      }}
+                      className="ml-auto whitespace-nowrap rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                    >
+                      Подставить
+                    </button>
+                  </div>
+                )}
                 <input
                   placeholder="Email (необязательно)"
                   value={newEmail}
