@@ -268,7 +268,13 @@ export class SpravochnikService implements OnModuleInit {
       serviceMap.get(row.serviceDescription)!.parts.push(row);
     }
 
-    // Build result with real catalog data
+    // Helper: check if a part name matches any complaint keyword
+    const matchesAnyKeyword = (name: string): boolean => {
+      const lower = name.toLowerCase();
+      return patterns.some((p) => lower.includes(p.replace(/%/g, '')));
+    };
+
+    // Build result with real catalog data, filtering parts by complaint keywords
     const services = [...serviceMap.values()].map((svc) => {
       // Find best matching catalog service
       const catalogMatch = catalogServices.find(
@@ -277,12 +283,18 @@ export class SpravochnikService implements OnModuleInit {
           svc.serviceDescription.toLowerCase().includes(cs.name.substring(0, 20).toLowerCase()),
       );
 
+      // Filter parts: keep only those whose name matches complaint keywords
+      const relevantParts = svc.parts.filter((p) => {
+        const realPart = p.partId ? partMap.get(p.partId) : null;
+        return matchesAnyKeyword(p.partName) || (realPart ? matchesAnyKeyword(realPart.name) : false);
+      });
+
       return {
         serviceDescription: svc.serviceDescription,
         serviceId: catalogMatch?.id || null,
         serviceName: catalogMatch?.name || null,
         servicePrice: catalogMatch ? Number(catalogMatch.price) : null,
-        parts: svc.parts.map((p) => {
+        parts: relevantParts.map((p) => {
           const realPart = p.partId ? partMap.get(p.partId) : null;
           return {
             partId: p.partId,
