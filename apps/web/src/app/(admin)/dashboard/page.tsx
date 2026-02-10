@@ -1430,7 +1430,7 @@ function AppointmentDetailModal({
                                           const total = Number(e.target.value) || 0;
                                           const price = item.unitPrice || 1;
                                           const newQty = Math.round((total / price) * 100) / 100;
-                                          handleUpdatePlannedItem(idx, 'quantity', newQty);
+                                          setPlannedItems(plannedItems.map((it, i) => i === idx ? { ...it, quantity: newQty, normHours: newQty } : it));
                                         }}
                                         className="w-28 rounded border border-gray-200 px-2 py-0.5 text-right text-xs font-medium text-gray-700 focus:border-primary-500 focus:outline-none"
                                       />
