@@ -1,9 +1,10 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsOptional, IsUUID, IsArray, IsNumber, ValidateNested, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Roles, CurrentTenant, CurrentUser, type CurrentUserData } from '../../common/decorators';
 import { AiWorkOrderService } from './ai-work-order.service';
+import { SpravochnikService } from './spravochnik.service';
 
 // --- DTOs ---
 
@@ -172,7 +173,10 @@ class AdjustDto {
 @ApiBearerAuth()
 @Controller('ai-work-order')
 export class AiWorkOrderController {
-  constructor(private readonly aiWorkOrderService: AiWorkOrderService) {}
+  constructor(
+    private readonly aiWorkOrderService: AiWorkOrderService,
+    private readonly spravochnikService: SpravochnikService,
+  ) {}
 
   @Post('parse')
   @Roles('work-orders:create')
@@ -203,5 +207,30 @@ export class AiWorkOrderController {
     @Body() dto: AdjustDto,
   ) {
     return this.aiWorkOrderService.adjust(tenantId, dto);
+  }
+
+  @Get('recommendations')
+  @Roles('work-orders:create')
+  @ApiOperation({ summary: 'Рекомендации из справочника по марке+модели+жалобе' })
+  async recommendations(
+    @CurrentTenant() tenantId: string,
+    @Query('make') make: string,
+    @Query('model') model: string,
+    @Query('complaint') complaint: string,
+  ) {
+    if (!make || !model || !complaint) {
+      return { services: [] };
+    }
+    return this.spravochnikService.getRecommendations(tenantId, make, model, complaint);
+  }
+
+  @Post('spravochnik/refresh')
+  @Roles('work-orders:create')
+  @ApiOperation({ summary: 'Принудительное обновление справочника для текущего тенанта' })
+  async refreshSpravochnik(
+    @CurrentTenant() tenantId: string,
+  ) {
+    const result = await this.spravochnikService.refreshTenant(tenantId);
+    return { message: `Справочник обновлён: ${result.rowsInserted} записей`, ...result };
   }
 }

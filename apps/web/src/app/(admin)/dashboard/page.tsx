@@ -3493,9 +3493,10 @@ interface AiParseResult {
   candidateClients: AiCandidateClient[];
   vehicle: { existingId: string | null; make: string | null; model: string | null; year: number | null; licensePlate: string | null; vin: string | null; isNew: boolean };
   clientComplaints: string;
-  suggestedServices: { serviceId: string; name: string; price: number; normHours: number }[];
-  suggestedParts: { partId: string; name: string; sellPrice: number; quantity: number; inStock: boolean }[];
+  suggestedServices: { serviceId: string; name: string; price: number; normHours: number; usageCount?: number }[];
+  suggestedParts: { partId: string; name: string; sellPrice: number; quantity: number; inStock: boolean; usageCount?: number }[];
   suggestedMechanic: { mechanicId: string; firstName: string; lastName: string; activeOrdersCount: number } | null;
+  spravochnikUsed?: boolean;
 }
 
 function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
@@ -3787,6 +3788,13 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
               />
             </div>
 
+            {/* Source indicator */}
+            {preview.spravochnikUsed !== undefined && (
+              <div className={`rounded-lg px-3 py-1.5 text-xs font-medium ${preview.spravochnikUsed ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-violet-50 text-violet-700 border border-violet-200'}`}>
+                {preview.spravochnikUsed ? 'Из справочника (на основе истории обслуживания)' : 'AI-подбор'}
+              </div>
+            )}
+
             {/* Services */}
             {preview.suggestedServices.length > 0 && (
               <div className={`rounded-lg border border-gray-200 p-3 ${adjusting ? 'opacity-50' : ''}`}>
@@ -3830,6 +3838,7 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                         className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                       />
                       <span className="flex-1 truncate">{p.name} {p.quantity > 1 && `x${p.quantity}`}</span>
+                      {p.usageCount && <span className="whitespace-nowrap text-xs text-emerald-600">{p.usageCount}x</span>}
                       <span className="whitespace-nowrap text-gray-500">{formatMoney(p.sellPrice)}</span>
                       {!p.inStock && <span className="text-xs text-red-500">нет на складе</span>}
                     </label>

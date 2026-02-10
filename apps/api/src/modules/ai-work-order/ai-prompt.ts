@@ -2,10 +2,9 @@ export function buildSystemPrompt(
   services: { id: string; name: string; price: number; normHours: number | null }[],
   parts: { id: string; name: string; brand: string | null; sellPrice: number; currentStock: number }[],
   mechanics: { id: string; firstName: string; lastName: string; activeOrdersCount: number }[],
-  history?: { make: string; model: string; entries: VehicleHistoryEntry[] },
 ): string {
-  const svcLines = services.map((s) => `${s.id}|${s.name}|${s.price}|${s.normHours ?? ''}`).join('\n');
-  const partLines = parts.map((p) => `${p.id}|${p.name}|${p.sellPrice}|${p.currentStock}`).join('\n');
+  // Services and parts catalogs are no longer sent to AI — spravochnik handles selection.
+  // AI only parses: client, vehicle, complaint, mechanic.
   const mechLines = mechanics.map((m) => `${m.id}|${m.lastName} ${m.firstName}|${m.activeOrdersCount}`).join('\n');
 
   return `Ты — AI-ассистент мастера-приёмщика автосервиса. Извлеки из текста информацию для заказ-наряда.
@@ -15,27 +14,16 @@ export function buildSystemPrompt(
 2. Извлеки авто (марка, модель, год, госномер, VIN)
 3. Марки латиницей: Камри→Camry, Тойота→Toyota, Хундай→Hyundai, Киа→Kia, Мерседес→Mercedes-Benz, БМВ→BMW, Фольксваген→Volkswagen, Лада→LADA, Ниссан→Nissan, Мазда→Mazda, Митсубиси→Mitsubishi, Рено→Renault, Шкода→Skoda
 4. Госномера в верхний регистр, кириллица→латиница: А→A,В→B,Е→E,К→K,М→M,Н→H,О→O,Р→P,С→C,Т→T,У→Y,Х→X
-5. Подбери услуги ТОЛЬКО из каталога ниже по id. ВАЖНО: выбирай услугу, ТОЧНО соответствующую жалобе клиента и упомянутой системе авто. Не путай системы: тормоза → диагностика тормозной системы (НЕ подвески), двигатель/мотор/троит/дым → диагностика двигателя, подвеска/стук/люфт → диагностика подвески, кондиционер → диагностика кондиционера. Всегда соотноси название услуги с конкретной жалобой
-6. КОРОБКА ПЕРЕДАЧ И СЦЕПЛЕНИЕ: определи тип КПП по марке/модели. Если жалоба на сцепление/КПП:
-   - АКПП/вариатор/CVT (BMW X3/X5, Toyota Camry, Hyundai Solaris АКПП, Subaru с CVT и т.д.) → услуга "Диагностика АКПП", запчасти: масло ATF/фильтр АКПП. НЕ добавляй комплект сцепления/диск сцепления/корзину — у АКПП/CVT нет сцепления!
-   - МКПП/робот/DSG (Lada, Renault Logan МКПП, VW с DSG, Mitsubishi Lancer Evo и т.д.) → услуга "Диагностика КПП", запчасти: комплект сцепления, выжимной подшипник
-   - Запчасти должны СТРОГО соответствовать типу КПП. Не ставь сцепление на автомат и не ставь ATF на механику
-7. К КАЖДОЙ услуге подбери необходимые запчасти из каталога запчастей. Примеры: замена колодок → колодки тормозные, замена масла → масло + фильтр масляный, замена свечей → свечи зажигания, ремонт подвески → сайлентблоки/рычаги/стойки. Даже для диагностики подбери расходники если нужны. Бери запчасти ТОЛЬКО из каталога (с остатком > 0 предпочтительнее)
-8. ВАЖНО: учитывай совместимость запчастей с автомобилем. Для масел выбирай правильную вязкость по марке/модели (например: Mazda 3 → 5W-30, не 5W-40; Toyota Camry 2.5 → 0W-20 или 5W-30; Hyundai/Kia → 5W-30; BMW → 5W-30 LL-01; Mercedes → 5W-30 MB 229.5; VW/Skoda → 5W-30 504/507). Для фильтров и колодок выбирай подходящие по размеру/типу. Не бери запчасти в промышленной таре (200л бочки) — выбирай малую фасовку (1–5л)
-9. Выбери механика с наименьшей загрузкой
-10. Если нет данных — null
-
-УСЛУГИ (id|название|цена|нормочасы):
-${svcLines || '(пусто)'}
-
-ЗАПЧАСТИ (id|название|цена|остаток):
-${partLines || '(пусто)'}
+5. Извлеки жалобу клиента как есть из текста
+6. Выбери механика с наименьшей загрузкой
+7. Если нет данных — null
+8. suggestedServices и suggestedParts — ВСЕГДА пустые массивы (подбор делает справочник)
 
 МЕХАНИКИ (id|ФИО|активныхЗН):
 ${mechLines || '(пусто)'}
-${history?.entries.length ? formatVehicleHistory(history.make, history.model, history.entries) : ''}
+
 Ответ СТРОГО JSON без markdown:
-{"client":{"firstName":"str|null","lastName":"str|null","phone":"str|null"},"vehicle":{"make":"str|null","model":"str|null","year":"num|null","licensePlate":"str|null","vin":"str|null"},"clientComplaints":"str","suggestedServices":[{"serviceId":"uuid","name":"str","price":0,"normHours":0}],"suggestedParts":[{"partId":"uuid","name":"str","sellPrice":0,"quantity":1}],"suggestedMechanicId":"uuid|null"}`;
+{"client":{"firstName":"str|null","lastName":"str|null","phone":"str|null"},"vehicle":{"make":"str|null","model":"str|null","year":"num|null","licensePlate":"str|null","vin":"str|null"},"clientComplaints":"str","suggestedServices":[],"suggestedParts":[],"suggestedMechanicId":"uuid|null"}`;
 }
 
 export interface VehicleHistoryEntry {

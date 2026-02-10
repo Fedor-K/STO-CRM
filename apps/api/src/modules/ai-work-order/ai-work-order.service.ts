@@ -8,6 +8,7 @@ import { AppointmentsService } from '../appointments/appointments.service';
 import { UsersService } from '../users/users.service';
 import { VehiclesService } from '../vehicles/vehicles.service';
 import { buildSystemPrompt, buildAdjustPrompt, type VehicleHistoryEntry } from './ai-prompt';
+import { SpravochnikService } from './spravochnik.service';
 
 interface ParsedAiResult {
   client: {
@@ -40,6 +41,7 @@ export class AiWorkOrderService {
     private readonly appointmentsService: AppointmentsService,
     private readonly usersService: UsersService,
     private readonly vehiclesService: VehiclesService,
+    private readonly spravochnikService: SpravochnikService,
   ) {
     const apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
     if (!apiKey) {
@@ -99,81 +101,16 @@ export class AiWorkOrderService {
       throw new BadRequestException('AI-функция не настроена: ANTHROPIC_API_KEY не задан');
     }
 
-    // 1. Extract keywords from description for smart catalog filtering
-    const stopWords = new Set([
-      'это', 'что', 'как', 'для', 'при', 'его', 'она', 'они', 'был', 'была', 'будет',
-      'нужно', 'нужна', 'просит', 'говорит', 'также', 'приехал', 'приехала', 'госномер',
-      'номер', 'год', 'года', 'замена', 'замену', 'заменить', 'поменять', 'менять',
-      'ремонт', 'сделать', 'проверить', 'нужен', 'нужна', 'нужны', 'очень', 'еще',
-      'который', 'которая', 'которые', 'автомобиль', 'машина', 'машину', 'авто',
-    ]);
-    const keywords = description
-      .toLowerCase()
-      .replace(/[^а-яёa-z0-9\s]/g, ' ')
-      .split(/\s+/)
-      .filter((w) => w.length >= 3)
-      .filter((w) => !stopWords.has(w));
-    const uniqueKeywords = [...new Set(keywords)];
-
-    // 2. Load catalogs in parallel — services & parts filtered by keywords
-    const serviceKeywordFilter = uniqueKeywords.length > 0
-      ? { OR: uniqueKeywords.map((kw) => ({ name: { contains: kw, mode: 'insensitive' as const } })) }
-      : {};
-    const partKeywordFilter = uniqueKeywords.length > 0
-      ? { OR: uniqueKeywords.map((kw) => ({ name: { contains: kw, mode: 'insensitive' as const } })) }
-      : {};
-
-    const [relevantServices, topServices, relevantParts, topParts, mechanicsRaw] = await Promise.all([
-      // Services matching description keywords
-      this.prisma.service.findMany({
-        where: { tenantId, isActive: true, ...serviceKeywordFilter },
-        select: { id: true, name: true, price: true, normHours: true },
-        orderBy: { name: 'asc' },
-        take: 150,
-      }),
-      // Top common services as fallback (диагностика, ТО)
-      this.prisma.service.findMany({
-        where: { tenantId, isActive: true, OR: [
-          { name: { contains: 'диагностик', mode: 'insensitive' } },
-          { name: { contains: 'ТО ', mode: 'insensitive' } },
-        ]},
-        select: { id: true, name: true, price: true, normHours: true },
-        orderBy: { name: 'asc' },
-        take: 30,
-      }),
-      // Parts matching description keywords
-      this.prisma.part.findMany({
-        where: { tenantId, ...partKeywordFilter },
-        select: { id: true, name: true, brand: true, sellPrice: true, currentStock: true },
-        orderBy: { currentStock: 'desc' },
-        take: 200,
-      }),
-      // Top in-stock parts as fallback
-      this.prisma.part.findMany({
-        where: { tenantId, currentStock: { gt: 0 } },
-        select: { id: true, name: true, brand: true, sellPrice: true, currentStock: true },
-        orderBy: { currentStock: 'desc' },
-        take: 50,
-      }),
-      this.prisma.user.findMany({
-        where: { tenantId, role: 'MECHANIC', isActive: true },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          _count: { select: { workOrdersAsMechanic: { where: { status: { in: ['NEW', 'DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED'] } } } } },
-        },
-      }),
-    ]);
-
-    // Merge and deduplicate
-    const serviceMap = new Map<string, typeof relevantServices[0]>();
-    for (const s of [...relevantServices, ...topServices]) serviceMap.set(s.id, s);
-    const services = [...serviceMap.values()].slice(0, 250);
-
-    const partMap = new Map<string, typeof relevantParts[0]>();
-    for (const p of [...relevantParts, ...topParts]) partMap.set(p.id, p);
-    const parts = [...partMap.values()].slice(0, 250);
+    // 1. Load only mechanics (AI no longer selects services/parts — spravochnik does)
+    const mechanicsRaw = await this.prisma.user.findMany({
+      where: { tenantId, role: 'MECHANIC', isActive: true },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        _count: { select: { workOrdersAsMechanic: { where: { status: { in: ['NEW', 'DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED'] } } } } },
+      },
+    });
 
     const mechanics = mechanicsRaw.map((m) => ({
       id: m.id,
@@ -182,17 +119,13 @@ export class AiWorkOrderService {
       activeOrdersCount: (m as any)._count.workOrdersAsMechanic,
     }));
 
-    // 2. Build system prompt with catalogs
-    const systemPrompt = buildSystemPrompt(
-      services.map((s) => ({ ...s, price: Number(s.price), normHours: s.normHours ? Number(s.normHours) : null })),
-      parts.map((p) => ({ ...p, sellPrice: Number(p.sellPrice) })),
-      mechanics,
-    );
+    // 2. Build system prompt (lightweight — only mechanics, no catalogs)
+    const systemPrompt = buildSystemPrompt([], [], mechanics);
 
-    // 3. Call Claude
+    // 3. Call Claude for text parsing only
     const message = await this.anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
+      max_tokens: 1000,
       system: systemPrompt,
       messages: [{ role: 'user', content: description }],
     });
@@ -306,22 +239,50 @@ export class AiWorkOrderService {
       ? mechanics.find((m) => m.id === parsed.suggestedMechanicId) || sortedMechanics[0]
       : sortedMechanics[0];
 
-    // 6. Validate serviceIds and partIds from AI response
-    const serviceIds = new Set(services.map((s) => s.id));
-    const partIds = new Set(parts.map((p) => p.id));
-
-    const validServices = (parsed.suggestedServices || []).filter((s) => serviceIds.has(s.serviceId));
-    const validParts = (parsed.suggestedParts || []).filter((p) => partIds.has(p.partId));
-
-    // 7. Get vehicle history for the detected make+model
+    // 6. Try spravochnik for make+model (deterministic, fast)
     const vehicleMake = existingVehicle?.make || parsed.vehicle?.make;
     const vehicleModel = existingVehicle?.model || parsed.vehicle?.model;
-    let vehicleHistory: VehicleHistoryEntry[] = [];
+    const complaint = parsed.clientComplaints || description;
+    let spravochnikUsed = false;
+    let finalServices: { serviceId: string; name: string; price: number; normHours: number; usageCount?: number }[] = [];
+    let finalParts: { partId: string; name: string; sellPrice: number; quantity: number; inStock: boolean; usageCount?: number }[] = [];
+
     if (vehicleMake && vehicleModel) {
       try {
-        vehicleHistory = await this.getVehicleHistory(tenantId, vehicleMake, vehicleModel);
+        const recs = await this.spravochnikService.getRecommendations(tenantId, vehicleMake, vehicleModel, complaint);
+        if (recs.services.length > 0) {
+          spravochnikUsed = true;
+
+          // Build services from spravochnik
+          finalServices = recs.services
+            .filter((s) => s.serviceId)
+            .map((s) => ({
+              serviceId: s.serviceId!,
+              name: s.serviceName || s.serviceDescription,
+              price: s.servicePrice || 0,
+              normHours: 0,
+              usageCount: undefined as number | undefined,
+            }));
+
+          // Build parts from spravochnik (with current catalog price/stock)
+          const allSpravParts = recs.services.flatMap((s) => s.parts);
+          const uniqueParts = new Map<string, typeof allSpravParts[0]>();
+          for (const p of allSpravParts) {
+            if (p.partId && p.isActive && !uniqueParts.has(p.partId)) {
+              uniqueParts.set(p.partId, p);
+            }
+          }
+          finalParts = [...uniqueParts.values()].map((p) => ({
+            partId: p.partId!,
+            name: p.partName,
+            sellPrice: p.currentPrice,
+            quantity: 1,
+            inStock: p.currentStock > 0,
+            usageCount: p.usageCount,
+          }));
+        }
       } catch (e) {
-        this.logger.warn(`Ошибка получения истории авто: ${e}`);
+        this.logger.warn(`Ошибка справочника, используем AI-подбор: ${e}`);
       }
     }
 
@@ -352,26 +313,9 @@ export class AiWorkOrderService {
         vin: existingVehicle?.vin || parsed.vehicle?.vin || null,
         isNew: !existingVehicle,
       },
-      clientComplaints: parsed.clientComplaints || description,
-      suggestedServices: validServices.map((s) => {
-        const svc = services.find((sv) => sv.id === s.serviceId);
-        return {
-          serviceId: s.serviceId,
-          name: svc?.name || s.name,
-          price: Number(svc?.price ?? s.price),
-          normHours: svc?.normHours ? Number(svc.normHours) : s.normHours,
-        };
-      }),
-      suggestedParts: validParts.map((p) => {
-        const part = parts.find((pt) => pt.id === p.partId);
-        return {
-          partId: p.partId,
-          name: part?.name || p.name,
-          sellPrice: Number(part?.sellPrice ?? p.sellPrice),
-          quantity: p.quantity || 1,
-          inStock: (part?.currentStock ?? 0) >= (p.quantity || 1),
-        };
-      }),
+      clientComplaints: complaint,
+      suggestedServices: finalServices,
+      suggestedParts: finalParts,
       suggestedMechanic: suggestedMechanic
         ? {
             mechanicId: suggestedMechanic.id,
@@ -380,7 +324,7 @@ export class AiWorkOrderService {
             activeOrdersCount: suggestedMechanic.activeOrdersCount,
           }
         : null,
-      vehicleHistory: vehicleHistory.length > 0 ? vehicleHistory : undefined,
+      spravochnikUsed,
     };
   }
 
@@ -496,11 +440,57 @@ export class AiWorkOrderService {
       currentParts: { partId: string; name: string }[];
     },
   ) {
+    // 1. Try spravochnik first (fast, deterministic)
+    try {
+      const recs = await this.spravochnikService.getRecommendations(
+        tenantId,
+        data.vehicle.make,
+        data.vehicle.model,
+        data.complaint,
+      );
+
+      if (recs.services.length > 0) {
+        const suggestedServices = recs.services
+          .filter((s) => s.serviceId)
+          .map((s) => ({
+            serviceId: s.serviceId!,
+            name: s.serviceName || s.serviceDescription,
+            price: s.servicePrice || 0,
+            normHours: 0,
+            usageCount: undefined as number | undefined,
+          }));
+
+        const allSpravParts = recs.services.flatMap((s) => s.parts);
+        const uniqueParts = new Map<string, typeof allSpravParts[0]>();
+        for (const p of allSpravParts) {
+          if (p.partId && p.isActive && !uniqueParts.has(p.partId)) {
+            uniqueParts.set(p.partId, p);
+          }
+        }
+
+        return {
+          suggestedServices,
+          suggestedParts: [...uniqueParts.values()].map((p) => ({
+            partId: p.partId!,
+            name: p.partName,
+            sellPrice: p.currentPrice,
+            quantity: 1,
+            inStock: p.currentStock > 0,
+            usageCount: p.usageCount,
+          })),
+          explanation: 'Подобрано из справочника на основе истории обслуживания',
+          spravochnikUsed: true,
+        };
+      }
+    } catch (e) {
+      this.logger.warn(`Ошибка справочника при adjust, fallback на AI: ${e}`);
+    }
+
+    // 2. Fallback to AI
     if (!this.configService.get<string>('ANTHROPIC_API_KEY')) {
       throw new BadRequestException('AI-функция не настроена');
     }
 
-    // Load catalogs (filtered by complaint keywords)
     const keywords = data.complaint
       .toLowerCase()
       .replace(/[^а-яёa-z0-9\s]/g, ' ')
@@ -575,24 +565,23 @@ export class AiWorkOrderService {
       throw new BadRequestException('AI не вернул ответ');
     }
 
-    let parsed: any;
+    let aiParsed: any;
     try {
       let jsonText = textBlock.text.trim();
       if (jsonText.startsWith('```')) {
         jsonText = jsonText.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
       }
-      parsed = JSON.parse(jsonText);
+      aiParsed = JSON.parse(jsonText);
     } catch {
       this.logger.error(`AI adjust вернул невалидный JSON: ${textBlock.text}`);
       throw new BadRequestException('AI вернул невалидный ответ');
     }
 
-    // Validate IDs
     const serviceIds = new Set(allServices.map((s) => s.id));
     const partIds = new Set(allParts.map((p) => p.id));
 
-    const validServices = (parsed.suggestedServices || []).filter((s: any) => serviceIds.has(s.serviceId));
-    const validParts = (parsed.suggestedParts || []).filter((p: any) => partIds.has(p.partId));
+    const validServices = (aiParsed.suggestedServices || []).filter((s: any) => serviceIds.has(s.serviceId));
+    const validParts = (aiParsed.suggestedParts || []).filter((p: any) => partIds.has(p.partId));
 
     return {
       suggestedServices: validServices.map((s: any) => {
@@ -603,7 +592,8 @@ export class AiWorkOrderService {
         const part = allParts.find((pt) => pt.id === p.partId);
         return { partId: p.partId, name: part?.name || p.name, sellPrice: Number(part?.sellPrice ?? p.sellPrice), quantity: p.quantity || 1, inStock: (part?.currentStock ?? 0) >= (p.quantity || 1) };
       }),
-      explanation: parsed.explanation || '',
+      explanation: aiParsed.explanation || '',
+      spravochnikUsed: false,
     };
   }
 }

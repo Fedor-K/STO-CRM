@@ -114,16 +114,17 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users          User[]
-  vehicles       Vehicle[]
-  services       Service[]
-  repairTypes    RepairType[]
-  appointments   Appointment[]
-  workOrders     WorkOrder[]
-  parts          Part[]
-  purchaseOrders PurchaseOrder[]
-  transactions   Transaction[]
-  warehouses     Warehouse[]
+  users             User[]
+  vehicles          Vehicle[]
+  services          Service[]
+  repairTypes       RepairType[]
+  appointments      Appointment[]
+  workOrders        WorkOrder[]
+  parts             Part[]
+  purchaseOrders    PurchaseOrder[]
+  transactions      Transaction[]
+  warehouses        Warehouse[]
+  vehiclePartStats  VehiclePartStats[]
 
   @@map("tenants")
 }
@@ -473,6 +474,7 @@ model Part {
   stockMovements     StockMovement[]
   purchaseOrderItems PurchaseOrderItem[]
   warehouseStock     WarehouseStock[]
+  vehiclePartStats   VehiclePartStats[]
 
   @@index([tenantId])
   @@index([sku])
@@ -616,4 +618,29 @@ model WorkOrderActivity {
   @@index([workOrderId])
   @@index([createdAt])
   @@map("work_order_activities")
+}
+
+model VehiclePartStats {
+  id                 String   @id @default(uuid()) @db.Uuid
+  tenantId           String   @db.Uuid
+  make               String
+  model              String
+  serviceDescription String
+  partId             String?  @db.Uuid
+  partName           String
+  partSku            String?
+  partBrand          String?
+  avgPrice           Decimal  @default(0) @db.Decimal(12, 2)
+  usageCount         Int      @default(0)
+  woCount            Int      @default(0)
+  relevance          Decimal  @default(0) @db.Decimal(5, 2)
+  updatedAt          DateTime @default(now()) @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  part   Part?  @relation(fields: [partId], references: [id])
+
+  @@unique([tenantId, make, model, serviceDescription, partId])
+  @@index([tenantId, make, model])
+  @@index([tenantId, make, model, serviceDescription])
+  @@map("vehicle_part_stats")
 }
