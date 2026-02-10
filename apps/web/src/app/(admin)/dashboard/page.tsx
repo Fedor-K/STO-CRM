@@ -586,6 +586,11 @@ function CreateAppointmentModal({
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Sync advisorId when user loads
+  useEffect(() => {
+    if (user?.id && !advisorId) setAdvisorId(user.id);
+  }, [user?.id]);
+
   const [debouncedClientSearch, setDebouncedClientSearch] = useState('');
   useEffect(() => {
     const t = setTimeout(() => setDebouncedClientSearch(clientSearch), 300);
