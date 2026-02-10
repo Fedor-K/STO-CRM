@@ -87,7 +87,7 @@ export class SpravochnikService implements OnModuleInit {
   async refreshTenant(tenantId: string): Promise<{ rowsInserted: number }> {
     // 1. Clear existing data for this tenant
     await this.prisma.$executeRaw`
-      DELETE FROM vehicle_part_stats WHERE "tenantId" = ${tenantId}::uuid
+      DELETE FROM vehicle_part_stats WHERE "tenantId" = ${tenantId}
     `;
 
     // 2. Aggregate from work_order_items
@@ -130,7 +130,7 @@ export class SpravochnikService implements OnModuleInit {
           AND UPPER(v2.model) = UPPER(v.model)
       ) total_wo ON true
       WHERE labor.type = 'LABOR'
-        AND wo."tenantId" = ${tenantId}::uuid
+        AND wo."tenantId" = ${tenantId}
       GROUP BY
         wo."tenantId", UPPER(v.make), UPPER(v.model),
         labor.description, part."partId", part.description,
@@ -214,7 +214,7 @@ export class SpravochnikService implements OnModuleInit {
         "usageCount",
         "relevance"
       FROM vehicle_part_stats
-      WHERE "tenantId" = ${tenantId}::uuid
+      WHERE "tenantId" = ${tenantId}
         AND make = UPPER(${make})
         AND model = UPPER(${model})
         AND ("serviceDescription" ILIKE ANY(${patterns}))

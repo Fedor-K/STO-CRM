@@ -621,12 +621,12 @@ model WorkOrderActivity {
 }
 
 model VehiclePartStats {
-  id                 String   @id @default(uuid()) @db.Uuid
-  tenantId           String   @db.Uuid
+  id                 String   @id @default(uuid())
+  tenantId           String
   make               String
   model              String
   serviceDescription String
-  partId             String?  @db.Uuid
+  partId             String?
   partName           String
   partSku            String?
   partBrand          String?

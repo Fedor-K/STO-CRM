@@ -1,11 +1,11 @@
 -- CreateTable
 CREATE TABLE vehicle_part_stats (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  "tenantId" UUID NOT NULL REFERENCES tenants(id),
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "tenantId" TEXT NOT NULL REFERENCES tenants(id),
   make TEXT NOT NULL,
   model TEXT NOT NULL,
   "serviceDescription" TEXT NOT NULL,
-  "partId" UUID REFERENCES parts(id),
+  "partId" TEXT REFERENCES parts(id),
   "partName" TEXT NOT NULL,
   "partSku" TEXT,
   "partBrand" TEXT,
