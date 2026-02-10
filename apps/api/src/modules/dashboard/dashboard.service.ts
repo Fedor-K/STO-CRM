@@ -2,13 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
 const appointmentFunnelInclude = {
-  client: { select: { id: true, firstName: true, lastName: true, phone: true } },
+  client: { select: { id: true, firstName: true, lastName: true, middleName: true, phone: true } },
   advisor: { select: { id: true, firstName: true, lastName: true } },
   vehicle: { select: { id: true, make: true, model: true, licensePlate: true, mileage: true } },
 };
 
 const workOrderFunnelInclude = {
-  client: { select: { id: true, firstName: true, lastName: true, phone: true } },
+  client: { select: { id: true, firstName: true, lastName: true, middleName: true, phone: true } },
   mechanic: { select: { id: true, firstName: true, lastName: true } },
   vehicle: { select: { id: true, make: true, model: true, licensePlate: true, mileage: true } },
   items: { select: { type: true, recommended: true, approvedByClient: true } },

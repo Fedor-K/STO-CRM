@@ -30,7 +30,7 @@ interface AppointmentCard {
   status: string;
   notes: string | null;
   reminderAt: string | null;
-  client: { id: string; firstName: string; lastName: string; phone: string | null };
+  client: { id: string; firstName: string; lastName: string; middleName: string | null; phone: string | null };
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
 }
 
@@ -42,7 +42,7 @@ interface WorkOrderCard {
   totalAmount: string | number;
   createdAt: string;
   reminderAt: string | null;
-  client: { id: string; firstName: string; lastName: string; phone: string | null };
+  client: { id: string; firstName: string; lastName: string; middleName: string | null; phone: string | null };
   mechanic: { id: string; firstName: string; lastName: string } | null;
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
   items: { type: string; recommended: boolean; approvedByClient: boolean | null }[];
@@ -348,7 +348,7 @@ function CancelledColumnSection({ cancelled }: { cancelled: CancelledAppointment
           {cancelled.map((a) => (
             <div key={a.id} className="rounded border border-red-200 bg-white px-2 py-1.5">
               <p className="text-[11px] font-medium text-gray-800">
-                {a.client.firstName} {a.client.lastName}
+                {a.client.lastName} {a.client.firstName}{a.client.middleName ? ` ${a.client.middleName}` : ''}
               </p>
               <p className="text-[10px] text-gray-500">
                 {a.vehicle.make} {a.vehicle.model}
@@ -425,7 +425,7 @@ function AppointmentFunnelCard({
       className={`cursor-pointer rounded-lg border p-2.5 shadow-sm transition hover:shadow-md ${isOverdue ? 'border-red-500 bg-red-50 hover:border-red-400' : 'border-gray-200 bg-white hover:border-primary-300'}`}
     >
       <div className="text-sm font-medium text-gray-900">
-        {appointment.client.firstName} {appointment.client.lastName}
+        {appointment.client.lastName} {appointment.client.firstName}{appointment.client.middleName ? ` ${appointment.client.middleName}` : ''}
       </div>
       {appointment.client.phone && (
         <div className="mt-0.5 text-[11px] text-gray-500">{appointment.client.phone}</div>
@@ -505,7 +505,7 @@ function WorkOrderFunnelCard({ workOrder, onUpdate, onClick }: { workOrder: Work
         </span>
       </div>
       <div className="mt-1 text-sm text-gray-900">
-        {workOrder.client.firstName} {workOrder.client.lastName}
+        {workOrder.client.lastName} {workOrder.client.firstName}{workOrder.client.middleName ? ` ${workOrder.client.middleName}` : ''}
       </div>
       {workOrder.client.phone && (
         <div className="text-[11px] text-gray-500">{workOrder.client.phone}</div>
@@ -1029,7 +1029,7 @@ interface AppointmentDetail {
   notes: string | null;
   source: string | null;
   adChannel: string | null;
-  client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
+  client: { id: string; firstName: string; lastName: string; middleName: string | null; phone: string | null; email: string | null };
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; mileage: number | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   plannedItems: PlannedItem[] | null;
@@ -1310,7 +1310,7 @@ function AppointmentDetailModal({
             <div className="cursor-pointer rounded-lg bg-gray-50 p-3 transition-colors hover:bg-primary-50/50 hover:ring-1 hover:ring-primary-300" onClick={() => setSubModal('client')}>
               <p className="text-xs font-medium text-gray-500">Клиент</p>
               <p className="text-sm font-semibold text-gray-900">
-                {appointment.client.firstName} {appointment.client.lastName}
+                {appointment.client.lastName} {appointment.client.firstName}{appointment.client.middleName ? ` ${appointment.client.middleName}` : ''}
               </p>
               {appointment.client.phone && (
                 <p className="text-xs text-gray-600">{appointment.client.phone}</p>
@@ -1923,7 +1923,7 @@ function VehicleHistoryModal({
           )}
           {fullVehicle?.client && (
             <div className="mt-2 text-sm text-gray-500">
-              Владелец: {fullVehicle.client.firstName} {fullVehicle.client.lastName}
+              Владелец: {fullVehicle.client.lastName} {fullVehicle.client.firstName}{(fullVehicle.client as any).middleName ? ` ${(fullVehicle.client as any).middleName}` : ''}
             </div>
           )}
         </div>
@@ -1977,7 +1977,7 @@ interface WorkOrderDetail {
   totalParts: string | number;
   totalAmount: string | number;
   createdAt: string;
-  client: { id: string; firstName: string; lastName: string; phone: string | null; email: string | null };
+  client: { id: string; firstName: string; lastName: string; middleName: string | null; phone: string | null; email: string | null };
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; vin: string | null; mileage: number | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   mechanic: { id: string; firstName: string; lastName: string } | null;
@@ -2333,7 +2333,7 @@ function WorkOrderDetailModal({
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-xs font-medium text-gray-500">Клиент</p>
                 <p className="text-sm font-semibold text-gray-900">
-                  {wo.client.firstName} {wo.client.lastName}
+                  {wo.client.lastName} {wo.client.firstName}{wo.client.middleName ? ` ${wo.client.middleName}` : ''}
                 </p>
                 {wo.client.phone && <p className="text-xs text-gray-600">{wo.client.phone}</p>}
               </div>

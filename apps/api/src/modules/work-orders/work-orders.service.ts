@@ -44,7 +44,7 @@ const WORK_ORDER_TRANSITIONS: Record<string, string[]> = {
 };
 
 const workOrderInclude = {
-  client: { select: { id: true, firstName: true, lastName: true, phone: true, email: true } },
+  client: { select: { id: true, firstName: true, lastName: true, middleName: true, phone: true, email: true } },
   advisor: { select: { id: true, firstName: true, lastName: true } },
   mechanic: { select: { id: true, firstName: true, lastName: true } },
   vehicle: { select: { id: true, make: true, model: true, licensePlate: true, year: true, vin: true, mileage: true } },
@@ -86,7 +86,7 @@ const workOrderInclude = {
 };
 
 const workOrderListInclude = {
-  client: { select: { id: true, firstName: true, lastName: true, phone: true } },
+  client: { select: { id: true, firstName: true, lastName: true, middleName: true, phone: true } },
   mechanic: { select: { id: true, firstName: true, lastName: true } },
   vehicle: { select: { id: true, make: true, model: true, licensePlate: true, mileage: true } },
   _count: { select: { items: true } },
