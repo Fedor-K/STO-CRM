@@ -1404,7 +1404,23 @@ function AppointmentDetailModal({
                               {plannedItems.map((item, idx) => item.type === 'LABOR' && (
                                 <tr key={idx} className="border-b border-gray-50">
                                   <td className="py-1.5 text-gray-700">{item.description}</td>
-                                  <td className="py-1.5 text-right text-gray-600">{item.normHours ?? item.quantity}</td>
+                                  <td className="py-1.5 text-right text-gray-600">
+                                    {column === 'estimating' ? (
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        step={0.1}
+                                        value={item.normHours ?? item.quantity}
+                                        onChange={(e) => {
+                                          const newQty = Number(e.target.value) || 0;
+                                          setPlannedItems(plannedItems.map((it, i) => i === idx ? { ...it, quantity: newQty, normHours: newQty } : it));
+                                        }}
+                                        className="w-16 rounded border border-gray-200 px-2 py-0.5 text-right text-xs text-gray-600 focus:border-primary-500 focus:outline-none"
+                                      />
+                                    ) : (
+                                      item.normHours ?? item.quantity
+                                    )}
+                                  </td>
                                   <td className="py-1.5 text-right">
                                     {column === 'estimating' ? (
                                       <input
