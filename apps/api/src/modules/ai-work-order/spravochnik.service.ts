@@ -21,45 +21,6 @@ export interface SpravochnikRecommendation {
   }[];
 }
 
-// Russian keywords mapped to search patterns (including morphological variants)
-const KEYWORD_MAP: Record<string, string[]> = {
-  'тормоз': ['тормоз', 'колод', 'диск тормоз', 'суппорт', 'барабан'],
-  'масло': ['масло', 'масл', 'фильтр масл'],
-  'подвеск': ['подвеск', 'амортизатор', 'стойк', 'стоек', 'сайлентблок', 'рычаг', 'стабилиз', 'втулк', 'втулок'],
-  'двигатель': ['двигател', 'мотор', 'двс'],
-  'мотор': ['двигател', 'мотор', 'двс'],
-  'кондиционер': ['кондиционер', 'климат', 'фреон'],
-  'свеч': ['свеч', 'зажиган'],
-  'ремень': ['ремень', 'ремн', 'ролик'],
-  'грм': ['грм'],
-  'фильтр': ['фильтр'],
-  'диагностик': ['диагностик'],
-  'сцеплен': ['сцеплен', 'выжимн'],
-  'кпп': ['кпп', 'коробк', 'передач'],
-  'акпп': ['акпп', 'автомат'],
-  'развал': ['развал', 'сход'],
-  'шин': ['шин', 'колес', 'балансир'],
-  'аккумулятор': ['аккумулятор', 'акб', 'батаре'],
-  'генератор': ['генератор'],
-  'стартер': ['стартер'],
-  'охлажден': ['охлажден', 'антифриз', 'радиатор', 'термостат', 'перегрев'],
-  'выхлоп': ['выхлоп', 'глушител', 'катализатор'],
-  'рулев': ['рулев', 'гур', 'насос гур', 'рейк', 'наконечник'],
-  'электр': ['электр', 'провод', 'датчик'],
-  'кузов': ['кузов', 'покраск', 'рихтовк'],
-  'стекло': ['стекл', 'лобов'],
-  'турбин': ['турбин', 'турбо'],
-  'инжектор': ['инжектор', 'форсунк'],
-  'топлив': ['топлив', 'бензонасос', 'фильтр топлив'],
-  'ошибк': ['ошибк', 'check', 'чек', 'диагностик'],
-  'лампа': ['ламп', 'лампочк', 'габарит', 'противотуман'],
-  'дроссель': ['дроссел', 'заслонк'],
-  'помпа': ['помп', 'водяной насос'],
-  'ступиц': ['ступиц', 'подшипник ступ'],
-  'привод': ['привод', 'шрус', 'пыльник'],
-  'опора': ['опора', 'опор двс', 'подушк двигат'],
-};
-
 @Injectable()
 export class SpravochnikService implements OnModuleInit {
   private readonly logger = new Logger(SpravochnikService.name);
@@ -173,50 +134,34 @@ export class SpravochnikService implements OnModuleInit {
   }
 
   /**
-   * Extract matching keywords from a complaint text.
+   * Get all distinct service descriptions available for a make+model in the spravochnik.
    */
-  private extractKeywords(complaint: string): string[] {
-    const lower = complaint.toLowerCase();
-    const patterns: string[] = [];
-
-    for (const [keyword, synonyms] of Object.entries(KEYWORD_MAP)) {
-      if (synonyms.some((syn) => lower.includes(syn)) || lower.includes(keyword)) {
-        for (const syn of synonyms) {
-          patterns.push(`%${syn}%`);
-        }
-      }
-    }
-
-    // If no keywords matched, try splitting into words ≥ 4 chars
-    if (patterns.length === 0) {
-      const words = lower
-        .replace(/[^а-яёa-z0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter((w) => w.length >= 4);
-      for (const word of [...new Set(words)].slice(0, 10)) {
-        patterns.push(`%${word}%`);
-      }
-    }
-
-    return [...new Set(patterns)];
+  async getAvailableServices(tenantId: string, make: string, model: string): Promise<string[]> {
+    const rows = await this.prisma.$queryRaw<{ serviceDescription: string }[]>`
+      SELECT DISTINCT "serviceDescription"
+      FROM vehicle_part_stats
+      WHERE "tenantId" = ${tenantId}
+        AND make = UPPER(${make})
+        AND model = UPPER(${model})
+      ORDER BY "serviceDescription"
+    `;
+    return rows.map(r => r.serviceDescription);
   }
 
   /**
-   * Get spravochnik recommendations for a make+model+complaint combination.
+   * Get spravochnik recommendations for a make+model with AI-selected service descriptions.
    */
   async getRecommendations(
     tenantId: string,
     make: string,
     model: string,
-    complaint: string,
+    serviceDescriptions: string[],
   ): Promise<SpravochnikRecommendation> {
-    const patterns = this.extractKeywords(complaint);
-
-    if (patterns.length === 0) {
+    if (serviceDescriptions.length === 0) {
       return { services: [] };
     }
 
-    // Query the spravochnik table
+    // Query the spravochnik table by exact service descriptions
     const rows = await this.prisma.$queryRaw<
       {
         serviceDescription: string;
@@ -242,7 +187,7 @@ export class SpravochnikService implements OnModuleInit {
       WHERE "tenantId" = ${tenantId}
         AND make = UPPER(${make})
         AND model = UPPER(${model})
-        AND ("serviceDescription" ILIKE ANY(${patterns}))
+        AND "serviceDescription" = ANY(${serviceDescriptions})
       ORDER BY "usageCount" DESC
     `;
 
@@ -293,21 +238,9 @@ export class SpravochnikService implements OnModuleInit {
       serviceMap.get(row.serviceDescription)!.parts.push(row);
     }
 
-    // Detect positional qualifiers to filter contradicting services
-    const complaintLower = complaint.toLowerCase();
-    const mentionsFront = /передн/.test(complaintLower);
-    const mentionsRear = /задн/.test(complaintLower);
-
     // Build result with real catalog data
     // Parts are already filtered by per-service relevance ≥35% in the stats table
-    const services = [...serviceMap.values()]
-      .filter((svc) => {
-        const desc = svc.serviceDescription.toLowerCase();
-        if (mentionsFront && !mentionsRear && /задн/.test(desc)) return false;
-        if (mentionsRear && !mentionsFront && /передн/.test(desc)) return false;
-        return true;
-      })
-      .map((svc) => {
+    const services = [...serviceMap.values()].map((svc) => {
       // Find best matching catalog service
       const catalogMatch = catalogServices.find(
         (cs) =>

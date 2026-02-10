@@ -63,6 +63,31 @@ ${mechLines || '(пусто)'}
 {"client":{"firstName":"str|null","lastName":"str|null","phone":"str|null"},"vehicle":{"make":"str|null","model":"str|null","year":"num|null","licensePlate":"str|null","vin":"str|null"},"clientComplaints":"str","suggestedServices":[{"serviceId":"uuid","name":"str","price":0,"normHours":0}],"suggestedParts":[{"partId":"uuid","name":"str","sellPrice":0,"quantity":1}],"suggestedMechanicId":"uuid|null"}`;
 }
 
+/**
+ * Prompt for AI to select relevant services from spravochnik list based on complaint.
+ */
+export function buildServiceMatchPrompt(
+  complaint: string,
+  availableServices: string[],
+): string {
+  const numbered = availableServices.map((s, i) => `${i + 1}. ${s}`).join('\n');
+  return `Ты — AI-ассистент автосервиса. Клиент обратился с жалобой. Выбери из списка услуги, которые нужны для решения его проблемы.
+
+ЖАЛОБА: ${complaint}
+
+ДОСТУПНЫЕ УСЛУГИ:
+${numbered}
+
+ПРАВИЛА:
+1. Выбери ТОЛЬКО те услуги, которые напрямую нужны для этой жалобы
+2. Не добавляй услуги "на всякий случай"
+3. Если жалоба про "передние тормоза" — НЕ выбирай задние, и наоборот
+4. Если ничего не подходит — верни пустой массив
+
+Ответ СТРОГО JSON без markdown:
+{"selectedServices":["точное название услуги из списка"]}`;
+}
+
 export interface VehicleHistoryEntry {
   service: string;
   parts: { name: string; avgPrice: number; count: number }[];

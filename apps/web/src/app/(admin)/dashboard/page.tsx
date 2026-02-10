@@ -1259,7 +1259,7 @@ function AppointmentDetailModal({
   return (
     <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${column === 'estimating' || (column === 'scheduled' && plannedItems.length > 0) ? 'max-w-2xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
+      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${column === 'estimating' || (column === 'scheduled' && plannedItems.length > 0) ? 'max-w-5xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">
             {column === 'appeal' ? 'Обращение' : column === 'estimating' ? 'Согласование' : 'Запись'}
@@ -3424,7 +3424,7 @@ function SearchablePartSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const { data } = useQuery<{ data: { id: string; name: string; sellPrice: string | number; brand: string | null }[] }>({
+  const { data } = useQuery<{ data: { id: string; name: string; sellPrice: string | number; brand: string | null; sku: string | null; currentStock: number }[] }>({
     queryKey: ['parts-search', debouncedSearch],
     queryFn: () => apiFetch(`/parts?limit=20&sort=name&order=asc&search=${encodeURIComponent(debouncedSearch)}`),
     enabled: debouncedSearch.length >= 2,
@@ -3441,18 +3441,27 @@ function SearchablePartSelect({
         className={inputClassName}
       />
       {showDropdown && data?.data && data.data.length > 0 && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+        <div className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+          <div className="sticky top-0 grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+            <span>Название</span>
+            <span className="w-24 text-right">Артикул</span>
+            <span className="w-16 text-center">Остаток</span>
+            <span className="w-20 text-right">Цена</span>
+          </div>
           {data.data.map((p) => (
             <button
               key={p.id}
               type="button"
               onClick={() => { onSelect(p); setSearch(''); setShowDropdown(false); }}
-              className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-primary-50"
+              className="grid w-full grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 text-left hover:bg-primary-50"
             >
-              <span className="text-sm text-gray-900 truncate">{p.name}</span>
-              <span className="ml-2 whitespace-nowrap text-xs text-gray-500">
-                {formatMoney(p.sellPrice)}
+              <span className="text-sm text-gray-900 truncate">
+                {p.name}
+                {p.brand && <span className="ml-1 text-xs text-gray-400">{p.brand}</span>}
               </span>
+              <span className="w-24 truncate text-right text-xs text-gray-400">{p.sku || '—'}</span>
+              <span className={`w-16 text-center text-xs font-medium ${p.currentStock > 0 ? 'text-green-600' : 'text-red-500'}`}>{p.currentStock ?? 0}</span>
+              <span className="w-20 text-right text-xs text-gray-500 whitespace-nowrap">{formatMoney(p.sellPrice)}</span>
             </button>
           ))}
         </div>

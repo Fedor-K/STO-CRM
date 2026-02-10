@@ -211,17 +211,18 @@ export class AiWorkOrderController {
 
   @Get('recommendations')
   @Roles('work-orders:create')
-  @ApiOperation({ summary: 'Рекомендации из справочника по марке+модели+жалобе' })
+  @ApiOperation({ summary: 'Рекомендации из справочника по марке+модели+услугам' })
   async recommendations(
     @CurrentTenant() tenantId: string,
     @Query('make') make: string,
     @Query('model') model: string,
-    @Query('complaint') complaint: string,
+    @Query('services') services: string,
   ) {
-    if (!make || !model || !complaint) {
+    if (!make || !model || !services) {
       return { services: [] };
     }
-    return this.spravochnikService.getRecommendations(tenantId, make, model, complaint);
+    const serviceDescriptions = services.split(',').map(s => s.trim()).filter(Boolean);
+    return this.spravochnikService.getRecommendations(tenantId, make, model, serviceDescriptions);
   }
 
   @Post('spravochnik/refresh')

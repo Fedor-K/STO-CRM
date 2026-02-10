@@ -7,7 +7,7 @@ import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { UsersService } from '../users/users.service';
 import { VehiclesService } from '../vehicles/vehicles.service';
-import { buildParseOnlyPrompt, buildSystemPrompt, buildAdjustPrompt, type VehicleHistoryEntry } from './ai-prompt';
+import { buildParseOnlyPrompt, buildSystemPrompt, buildAdjustPrompt, buildServiceMatchPrompt, type VehicleHistoryEntry } from './ai-prompt';
 import { SpravochnikService } from './spravochnik.service';
 
 interface ParsedAiResult {
@@ -237,7 +237,7 @@ export class AiWorkOrderService {
       ? mechanics.find((m) => m.id === parsed.suggestedMechanicId) || sortedMechanics[0]
       : sortedMechanics[0];
 
-    // 6. Try spravochnik for make+model (deterministic, fast)
+    // 6. Try spravochnik for make+model (AI selects services from available list)
     const vehicleMake = existingVehicle?.make || parsed.vehicle?.make;
     const vehicleModel = existingVehicle?.model || parsed.vehicle?.model;
     const complaint = parsed.clientComplaints || description;
@@ -247,35 +247,69 @@ export class AiWorkOrderService {
 
     if (vehicleMake && vehicleModel) {
       try {
-        const recs = await this.spravochnikService.getRecommendations(tenantId, vehicleMake, vehicleModel, complaint);
-        if (recs.services.length > 0) {
-          spravochnikUsed = true;
+        // Step 1: Get available services for this make+model
+        const availableServices = await this.spravochnikService.getAvailableServices(tenantId, vehicleMake, vehicleModel);
 
-          finalServices = recs.services
-            .filter((s) => s.serviceId)
-            .map((s) => ({
-              serviceId: s.serviceId!,
-              name: s.serviceName || s.serviceDescription,
-              price: s.servicePrice || 0,
-              normHours: 0,
-            }));
+        if (availableServices.length > 0) {
+          // Step 2: AI picks relevant services from the list
+          const serviceMatchPrompt = buildServiceMatchPrompt(complaint, availableServices);
+          const matchMsg = await this.anthropic.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 500,
+            temperature: 0,
+            messages: [{ role: 'user', content: serviceMatchPrompt }],
+          });
 
-          const allSpravParts = recs.services.flatMap((s) => s.parts);
-          const uniqueParts = new Map<string, typeof allSpravParts[0]>();
-          for (const p of allSpravParts) {
-            if (p.partId && p.isActive && !uniqueParts.has(p.partId)) {
-              uniqueParts.set(p.partId, p);
+          const matchBlock = matchMsg.content.find((b) => b.type === 'text');
+          let selectedServices: string[] = [];
+          if (matchBlock && matchBlock.type === 'text') {
+            try {
+              let matchJson = matchBlock.text.trim();
+              if (matchJson.startsWith('```')) {
+                matchJson = matchJson.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+              }
+              const matchParsed = JSON.parse(matchJson);
+              selectedServices = (matchParsed.selectedServices || []).filter(
+                (s: string) => availableServices.includes(s),
+              );
+            } catch {
+              this.logger.warn(`AI вернул невалидный JSON при подборе услуг: ${matchBlock.text}`);
             }
           }
-          finalParts = [...uniqueParts.values()].map((p) => ({
-            partId: p.partId!,
-            name: p.partName,
-            sku: p.partSku || null,
-            sellPrice: p.currentPrice,
-            quantity: 1,
-            inStock: p.currentStock > 0,
-            usageCount: p.usageCount,
-          }));
+
+          if (selectedServices.length > 0) {
+            // Step 3: Get recommendations for AI-selected services
+            const recs = await this.spravochnikService.getRecommendations(tenantId, vehicleMake, vehicleModel, selectedServices);
+            if (recs.services.length > 0) {
+              spravochnikUsed = true;
+
+              finalServices = recs.services
+                .filter((s) => s.serviceId)
+                .map((s) => ({
+                  serviceId: s.serviceId!,
+                  name: s.serviceName || s.serviceDescription,
+                  price: s.servicePrice || 0,
+                  normHours: 0,
+                }));
+
+              const allSpravParts = recs.services.flatMap((s) => s.parts);
+              const uniqueParts = new Map<string, typeof allSpravParts[0]>();
+              for (const p of allSpravParts) {
+                if (p.partId && p.isActive && !uniqueParts.has(p.partId)) {
+                  uniqueParts.set(p.partId, p);
+                }
+              }
+              finalParts = [...uniqueParts.values()].map((p) => ({
+                partId: p.partId!,
+                name: p.partName,
+                sku: p.partSku || null,
+                sellPrice: p.currentPrice,
+                quantity: 1,
+                inStock: p.currentStock > 0,
+                usageCount: p.usageCount,
+              }));
+            }
+          }
         }
       } catch (e) {
         this.logger.warn(`Ошибка справочника, используем AI-подбор: ${e}`);
@@ -496,48 +530,84 @@ export class AiWorkOrderService {
       currentParts: { partId: string; name: string }[];
     },
   ) {
-    // 1. Try spravochnik first (fast, deterministic)
+    // 1. Try spravochnik first (AI selects services from available list)
     try {
-      const recs = await this.spravochnikService.getRecommendations(
+      const availableServices = await this.spravochnikService.getAvailableServices(
         tenantId,
         data.vehicle.make,
         data.vehicle.model,
-        data.complaint,
       );
 
-      if (recs.services.length > 0) {
-        const suggestedServices = recs.services
-          .filter((s) => s.serviceId)
-          .map((s) => ({
-            serviceId: s.serviceId!,
-            name: s.serviceName || s.serviceDescription,
-            price: s.servicePrice || 0,
-            normHours: 0,
-            usageCount: undefined as number | undefined,
-          }));
+      if (availableServices.length > 0) {
+        // AI picks relevant services from the list
+        const serviceMatchPrompt = buildServiceMatchPrompt(data.complaint, availableServices);
+        const matchMsg = await this.anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 500,
+          temperature: 0,
+          messages: [{ role: 'user', content: serviceMatchPrompt }],
+        });
 
-        const allSpravParts = recs.services.flatMap((s) => s.parts);
-        const uniqueParts = new Map<string, typeof allSpravParts[0]>();
-        for (const p of allSpravParts) {
-          if (p.partId && p.isActive && !uniqueParts.has(p.partId)) {
-            uniqueParts.set(p.partId, p);
+        const matchBlock = matchMsg.content.find((b) => b.type === 'text');
+        let selectedServices: string[] = [];
+        if (matchBlock && matchBlock.type === 'text') {
+          try {
+            let matchJson = matchBlock.text.trim();
+            if (matchJson.startsWith('```')) {
+              matchJson = matchJson.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+            }
+            const matchParsed = JSON.parse(matchJson);
+            selectedServices = (matchParsed.selectedServices || []).filter(
+              (s: string) => availableServices.includes(s),
+            );
+          } catch {
+            this.logger.warn(`AI вернул невалидный JSON при подборе услуг (adjust): ${matchBlock.text}`);
           }
         }
 
-        return {
-          suggestedServices,
-          suggestedParts: [...uniqueParts.values()].map((p) => ({
-            partId: p.partId!,
-            name: p.partName,
-            sku: p.partSku || null,
-            sellPrice: p.currentPrice,
-            quantity: 1,
-            inStock: p.currentStock > 0,
-            usageCount: p.usageCount,
-          })),
-          explanation: 'Подобрано из справочника на основе истории обслуживания',
-          spravochnikUsed: true,
-        };
+        if (selectedServices.length > 0) {
+          const recs = await this.spravochnikService.getRecommendations(
+            tenantId,
+            data.vehicle.make,
+            data.vehicle.model,
+            selectedServices,
+          );
+
+          if (recs.services.length > 0) {
+            const suggestedServices = recs.services
+              .filter((s) => s.serviceId)
+              .map((s) => ({
+                serviceId: s.serviceId!,
+                name: s.serviceName || s.serviceDescription,
+                price: s.servicePrice || 0,
+                normHours: 0,
+                usageCount: undefined as number | undefined,
+              }));
+
+            const allSpravParts = recs.services.flatMap((s) => s.parts);
+            const uniqueParts = new Map<string, typeof allSpravParts[0]>();
+            for (const p of allSpravParts) {
+              if (p.partId && p.isActive && !uniqueParts.has(p.partId)) {
+                uniqueParts.set(p.partId, p);
+              }
+            }
+
+            return {
+              suggestedServices,
+              suggestedParts: [...uniqueParts.values()].map((p) => ({
+                partId: p.partId!,
+                name: p.partName,
+                sku: p.partSku || null,
+                sellPrice: p.currentPrice,
+                quantity: 1,
+                inStock: p.currentStock > 0,
+                usageCount: p.usageCount,
+              })),
+              explanation: 'Подобрано из справочника на основе истории обслуживания',
+              spravochnikUsed: true,
+            };
+          }
+        }
       }
     } catch (e) {
       this.logger.warn(`Ошибка справочника при adjust, fallback на AI: ${e}`);
