@@ -387,13 +387,16 @@ export class WorkOrdersService {
       clientComplaints?: string;
       diagnosticNotes?: string;
       inspectionChecklist?: any;
+      reminderAt?: string;
     },
     userId?: string,
   ): Promise<any> {
     const old = await this.findById(tenantId, id);
+    const updatePayload: any = { ...data };
+    if (data.reminderAt) updatePayload.reminderAt = new Date(data.reminderAt);
     const result = await this.prisma.workOrder.update({
       where: { id },
-      data,
+      data: updatePayload,
       include: workOrderInclude,
     });
 
@@ -488,9 +491,15 @@ export class WorkOrdersService {
     }
 
     const oldStatus = workOrder.status;
+    const updateData: any = { status: newStatus };
+    if (newStatus === 'DIAGNOSED') {
+      updateData.reminderAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    } else if (oldStatus === 'DIAGNOSED') {
+      updateData.reminderAt = null;
+    }
     const result = await this.prisma.workOrder.update({
       where: { id },
-      data: { status: newStatus },
+      data: updateData,
       include: workOrderInclude,
     });
 

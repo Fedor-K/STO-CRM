@@ -75,6 +75,10 @@ class UpdateWorkOrderDto {
   @IsOptional()
   @IsObject()
   inspectionChecklist?: Record<string, any>;
+
+  @IsOptional()
+  @IsString()
+  reminderAt?: string;
 }
 
 class UpdateStatusDto {

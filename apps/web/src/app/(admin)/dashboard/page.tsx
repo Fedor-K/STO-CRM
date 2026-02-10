@@ -41,6 +41,7 @@ interface WorkOrderCard {
   clientComplaints: string | null;
   totalAmount: string | number;
   createdAt: string;
+  reminderAt: string | null;
   client: { id: string; firstName: string; lastName: string; phone: string | null };
   mechanic: { id: string; firstName: string; lastName: string } | null;
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
@@ -466,6 +467,7 @@ function WorkOrderFunnelCard({ workOrder, onUpdate, onClick }: { workOrder: Work
   const next = WO_NEXT_STATUS[workOrder.status];
   const laborItems = (workOrder.items || []).filter((i) => i.type === 'LABOR' && (!i.recommended || i.approvedByClient === true));
   const needsLogs = workOrder.status === 'IN_PROGRESS' && next?.status === 'COMPLETED' && (workOrder._count?.workLogs ?? 0) < laborItems.length;
+  const isOverdue = workOrder.status === 'DIAGNOSED' && workOrder.reminderAt && new Date(workOrder.reminderAt) < new Date();
 
   async function handleNext(e: React.MouseEvent) {
     e.preventDefault();
@@ -493,7 +495,7 @@ function WorkOrderFunnelCard({ workOrder, onUpdate, onClick }: { workOrder: Work
   }
 
   return (
-    <div onClick={onClick} className="cursor-pointer rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm transition hover:shadow-md hover:border-primary-300">
+    <div onClick={onClick} className={`cursor-pointer rounded-lg border p-2.5 shadow-sm transition hover:shadow-md ${isOverdue ? 'border-red-500 bg-red-50 hover:border-red-400' : 'border-gray-200 bg-white hover:border-primary-300'}`}>
       <div className="flex items-center justify-between">
         <Link href={`/work-orders/${workOrder.id}`} onClick={(e) => e.stopPropagation()} className="text-xs font-bold text-primary-600 hover:underline">
           {workOrder.orderNumber}
@@ -1969,6 +1971,7 @@ interface WorkOrderDetail {
   status: string;
   clientComplaints: string | null;
   diagnosticNotes: string | null;
+  reminderAt: string | null;
   inspectionChecklist: InspectionChecklist | null;
   totalLabor: string | number;
   totalParts: string | number;
@@ -2027,6 +2030,7 @@ function WorkOrderDetailModal({
   const [checklist, setChecklist] = useState<InspectionChecklist>(createEmptyChecklist());
   const [mechanicId, setMechanicId] = useState('');
   const [mileage, setMileage] = useState('');
+  const [woReminderAt, setWoReminderAt] = useState('');
   const [initialized, setInitialized] = useState(false);
 
   // Add item
@@ -2049,6 +2053,15 @@ function WorkOrderDetailModal({
     }
     setMechanicId(initMechanicId);
     setMileage(wo.vehicle.mileage != null ? String(wo.vehicle.mileage) : '');
+    if (wo.reminderAt) {
+      const r = new Date(wo.reminderAt);
+      const ry = r.getFullYear();
+      const rm = String(r.getMonth() + 1).padStart(2, '0');
+      const rd = String(r.getDate()).padStart(2, '0');
+      const rh = String(r.getHours()).padStart(2, '0');
+      const rmin = String(r.getMinutes()).padStart(2, '0');
+      setWoReminderAt(`${ry}-${rm}-${rd}T${rh}:${rmin}`);
+    }
     setInitialized(true);
   }
 
@@ -2075,13 +2088,17 @@ function WorkOrderDetailModal({
           });
         }
       }
+      const woBody: any = {
+        clientComplaints: complaints || null,
+        inspectionChecklist: checklist,
+        mechanicId: mechanicId || null,
+      };
+      if (woReminderAt) {
+        woBody.reminderAt = new Date(woReminderAt).toISOString();
+      }
       await apiFetch(`/work-orders/${workOrderId}`, {
         method: 'PATCH',
-        body: JSON.stringify({
-          clientComplaints: complaints || null,
-          inspectionChecklist: checklist,
-          mechanicId: mechanicId || null,
-        }),
+        body: JSON.stringify(woBody),
       });
       queryClient.invalidateQueries({ queryKey: ['work-order-detail', workOrderId] });
       onUpdate();
@@ -2363,6 +2380,22 @@ function WorkOrderDetailModal({
                     className={inputCls}
                   />
                 </div>
+
+                {/* Reminder - relevant for DIAGNOSED (approval) */}
+                {wo.status === 'DIAGNOSED' && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600">Напоминание</label>
+                    <input
+                      type="datetime-local"
+                      value={woReminderAt}
+                      onChange={(e) => setWoReminderAt(e.target.value)}
+                      className={inputCls}
+                    />
+                    {woReminderAt && new Date(woReminderAt) < new Date() && (
+                      <p className="mt-1 text-xs text-red-500">Время напоминания просрочено</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Inspection checklist - relevant for DIAGNOSED+ */}
                 {['DIAGNOSED', 'APPROVED', 'IN_PROGRESS', 'PAUSED', 'COMPLETED'].includes(wo.status) && (

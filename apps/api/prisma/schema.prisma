@@ -293,6 +293,7 @@ model WorkOrder {
   approvedAmount   Decimal?        @db.Decimal(12, 2)
   mileageAtIntake  Int?
   fuelLevel        String?
+  reminderAt       DateTime?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   completedAt      DateTime?
