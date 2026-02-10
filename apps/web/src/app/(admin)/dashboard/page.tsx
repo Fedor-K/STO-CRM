@@ -1324,47 +1324,6 @@ function AppointmentDetailModal({
                 {new Date(appointment.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
-            {column === 'scheduled' && (
-              <div className="rounded-lg bg-blue-50 p-3">
-                <p className="text-xs font-medium text-blue-600">Дата записи (приезд)</p>
-                <p className="text-sm font-semibold text-blue-900">
-                  {new Date(appointment.scheduledStart).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
-            )}
-            {/* Advisor */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600">Приёмщик</label>
-              <select value={advisorId} onChange={(e) => setAdvisorId(e.target.value)} className={inputCls}>
-                <option value="">Не назначен</option>
-                {advisors?.data?.map((a) => (
-                  <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <label className="block text-xs font-medium text-gray-600">Заметки / жалобы</label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={3}
-                placeholder="Причина обращения..."
-                className={inputCls}
-              />
-            </div>
-
-            {/* Arrival date/time — only on estimating step */}
-            {column === 'estimating' && (
-              <div>
-                <label className="block text-xs font-medium text-gray-600">Дата и время приезда *</label>
-                <div className="mt-1 grid grid-cols-2 gap-2">
-                  <input type="date" value={arrivalDate} onChange={(e) => setArrivalDate(e.target.value)} className={inputCls} />
-                  <input type="time" value={arrivalTime} onChange={(e) => setArrivalTime(e.target.value)} className={inputCls} />
-                </div>
-              </div>
-            )}
 
             {/* Planned items — estimating (editable) and scheduled (read-only) */}
             {(column === 'estimating' || (column === 'scheduled' && plannedItems.length > 0)) && (
@@ -1626,6 +1585,48 @@ function AppointmentDetailModal({
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {column === 'scheduled' && (
+              <div className="rounded-lg bg-blue-50 p-3">
+                <p className="text-xs font-medium text-blue-600">Дата записи (приезд)</p>
+                <p className="text-sm font-semibold text-blue-900">
+                  {new Date(appointment.scheduledStart).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </p>
+              </div>
+            )}
+            {/* Advisor */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600">Приёмщик</label>
+              <select value={advisorId} onChange={(e) => setAdvisorId(e.target.value)} className={inputCls}>
+                <option value="">Не назначен</option>
+                {advisors?.data?.map((a) => (
+                  <option key={a.id} value={a.id}>{a.firstName} {a.lastName}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600">Заметки / жалобы</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                placeholder="Причина обращения..."
+                className={inputCls}
+              />
+            </div>
+
+            {/* Arrival date/time — only on estimating step */}
+            {column === 'estimating' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600">Дата и время приезда *</label>
+                <div className="mt-1 grid grid-cols-2 gap-2">
+                  <input type="date" value={arrivalDate} onChange={(e) => setArrivalDate(e.target.value)} className={inputCls} />
+                  <input type="time" value={arrivalTime} onChange={(e) => setArrivalTime(e.target.value)} className={inputCls} />
                 </div>
               </div>
             )}
