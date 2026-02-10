@@ -284,9 +284,21 @@ export class SpravochnikService implements OnModuleInit {
       serviceMap.get(row.serviceDescription)!.parts.push(row);
     }
 
+    // Detect positional qualifiers to filter contradicting services
+    const complaintLower = complaint.toLowerCase();
+    const mentionsFront = /передн/.test(complaintLower);
+    const mentionsRear = /задн/.test(complaintLower);
+
     // Build result with real catalog data
     // Parts are already filtered by per-service relevance ≥35% in the stats table
-    const services = [...serviceMap.values()].map((svc) => {
+    const services = [...serviceMap.values()]
+      .filter((svc) => {
+        const desc = svc.serviceDescription.toLowerCase();
+        if (mentionsFront && !mentionsRear && /задн/.test(desc)) return false;
+        if (mentionsRear && !mentionsFront && /передн/.test(desc)) return false;
+        return true;
+      })
+      .map((svc) => {
       // Find best matching catalog service
       const catalogMatch = catalogServices.find(
         (cs) =>
