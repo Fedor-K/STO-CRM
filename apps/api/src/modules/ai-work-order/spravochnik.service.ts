@@ -148,11 +148,15 @@ export class SpravochnikService implements OnModuleInit {
         labor.description, part."partId", part.description,
         p.sku, p.brand, sc.cnt
       HAVING COUNT(*) >= 2
+        AND sc.cnt >= 3
         AND ROUND(
           COUNT(DISTINCT wo.id)::numeric * 100.0
           / NULLIF(sc.cnt, 0),
           2
-        ) >= 35
+        ) >= CASE
+          WHEN sc.cnt >= 10 THEN 35
+          ELSE 55
+        END
     `;
 
     this.logger.log(`Справочник тенанта ${tenantId}: вставлено ${result} строк`);
