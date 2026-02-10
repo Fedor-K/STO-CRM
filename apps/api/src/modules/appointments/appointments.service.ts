@@ -105,6 +105,9 @@ export class AppointmentsService {
   ): Promise<any> {
     const existing = await this.findById(tenantId, id);
     const data: any = { status };
+    if (status === 'ESTIMATING') {
+      data.reminderAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    }
     if (status === 'CANCELLED') {
       data.cancelledFrom = existing.status;
     }
@@ -129,6 +132,7 @@ export class AppointmentsService {
       cancelComment?: string;
       status?: AppointmentStatus;
       plannedItems?: any;
+      reminderAt?: string;
     },
   ): Promise<any> {
     await this.findById(tenantId, id);
@@ -136,6 +140,7 @@ export class AppointmentsService {
     const updateData: any = { ...data };
     if (data.scheduledStart) updateData.scheduledStart = new Date(data.scheduledStart);
     if (data.scheduledEnd) updateData.scheduledEnd = new Date(data.scheduledEnd);
+    if (data.reminderAt) updateData.reminderAt = new Date(data.reminderAt);
 
     return this.prisma.appointment.update({
       where: { id },

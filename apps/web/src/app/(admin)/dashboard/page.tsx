@@ -29,6 +29,7 @@ interface AppointmentCard {
   scheduledEnd: string;
   status: string;
   notes: string | null;
+  reminderAt: string | null;
   client: { id: string; firstName: string; lastName: string; phone: string | null };
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
 }
@@ -415,11 +416,12 @@ function AppointmentFunnelCard({
   }
 
   const actionLabel = column === 'appeal' ? 'На согласование →' : column === 'scheduled' ? 'Создать ЗН →' : null;
+  const isOverdue = appointment.reminderAt && new Date(appointment.reminderAt) < new Date();
 
   return (
     <div
       onClick={onClick}
-      className="cursor-pointer rounded-lg border border-gray-200 bg-white p-2.5 shadow-sm transition hover:shadow-md hover:border-primary-300"
+      className={`cursor-pointer rounded-lg border p-2.5 shadow-sm transition hover:shadow-md ${isOverdue ? 'border-red-500 bg-red-50 hover:border-red-400' : 'border-gray-200 bg-white hover:border-primary-300'}`}
     >
       <div className="text-sm font-medium text-gray-900">
         {appointment.client.firstName} {appointment.client.lastName}
@@ -1029,6 +1031,7 @@ interface AppointmentDetail {
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; year: number | null; mileage: number | null };
   advisor: { id: string; firstName: string; lastName: string } | null;
   plannedItems: PlannedItem[] | null;
+  reminderAt: string | null;
 }
 
 interface PlannedItem {
@@ -1084,6 +1087,7 @@ function AppointmentDetailModal({
   const [declineComment, setDeclineComment] = useState('');
   const [arrivalDate, setArrivalDate] = useState('');
   const [arrivalTime, setArrivalTime] = useState('09:00');
+  const [reminderAt, setReminderAt] = useState('');
   const [plannedItems, setPlannedItems] = useState<PlannedItem[]>([]);
   const [showAddPlanned, setShowAddPlanned] = useState(false);
   const [plannedTab, setPlannedTab] = useState<'LABOR' | 'PART'>('LABOR');
@@ -1124,6 +1128,15 @@ function AppointmentDetailModal({
         const min = String(d.getMinutes()).padStart(2, '0');
         setArrivalDate(`${y}-${m}-${day}`);
         setArrivalTime(`${h}:${min}`);
+      }
+      if (appointment.reminderAt) {
+        const r = new Date(appointment.reminderAt);
+        const ry = r.getFullYear();
+        const rm = String(r.getMonth() + 1).padStart(2, '0');
+        const rd = String(r.getDate()).padStart(2, '0');
+        const rh = String(r.getHours()).padStart(2, '0');
+        const rmin = String(r.getMinutes()).padStart(2, '0');
+        setReminderAt(`${ry}-${rm}-${rd}T${rh}:${rmin}`);
       }
       setInitialized(true);
     }
@@ -1208,6 +1221,9 @@ function AppointmentDetailModal({
           body.scheduledStart = `${arrivalDate}T${arrivalTime}:00`;
           const endH = String(Math.min(Number(arrivalTime.split(':')[0]) + 1, 23)).padStart(2, '0');
           body.scheduledEnd = `${arrivalDate}T${endH}:${arrivalTime.split(':')[1]}:00`;
+        }
+        if (reminderAt) {
+          body.reminderAt = `${reminderAt}:00`;
         }
       }
       await apiFetch(`/appointments/${appointmentId}`, {
@@ -1324,6 +1340,22 @@ function AppointmentDetailModal({
                 {new Date(appointment.createdAt).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
+
+            {/* Reminder — only on estimating step */}
+            {column === 'estimating' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-600">Напоминание</label>
+                <input
+                  type="datetime-local"
+                  value={reminderAt}
+                  onChange={(e) => setReminderAt(e.target.value)}
+                  className={inputCls}
+                />
+                {reminderAt && new Date(reminderAt) < new Date() && (
+                  <p className="mt-1 text-xs text-red-500">Время напоминания просрочено</p>
+                )}
+              </div>
+            )}
 
             {/* Planned items — estimating (editable) and scheduled (read-only) */}
             {(column === 'estimating' || (column === 'scheduled' && plannedItems.length > 0)) && (
