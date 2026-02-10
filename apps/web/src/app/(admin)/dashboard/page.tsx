@@ -616,8 +616,12 @@ function CreateAppointmentModal({
   const { data: advisors } = useQuery<{ data: { id: string; firstName: string; lastName: string }[] }>({
     queryKey: ['advisors-for-appt'],
     queryFn: async () => {
-      const res = await apiFetch('/users?limit=100&sort=firstName&order=asc') as { data: { id: string; firstName: string; lastName: string; role: string }[] };
-      return { data: res.data.filter((u) => ['OWNER', 'MANAGER', 'RECEPTIONIST'].includes(u.role)) };
+      const [owners, managers, receptionists] = await Promise.all([
+        apiFetch('/users?limit=50&sort=firstName&order=asc&role=OWNER') as Promise<{ data: { id: string; firstName: string; lastName: string }[] }>,
+        apiFetch('/users?limit=50&sort=firstName&order=asc&role=MANAGER') as Promise<{ data: { id: string; firstName: string; lastName: string }[] }>,
+        apiFetch('/users?limit=50&sort=firstName&order=asc&role=RECEPTIONIST') as Promise<{ data: { id: string; firstName: string; lastName: string }[] }>,
+      ]);
+      return { data: [...owners.data, ...managers.data, ...receptionists.data] };
     },
   });
 
