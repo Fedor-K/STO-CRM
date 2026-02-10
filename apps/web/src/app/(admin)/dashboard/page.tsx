@@ -1223,7 +1223,7 @@ function AppointmentDetailModal({
           body.scheduledEnd = `${arrivalDate}T${endH}:${arrivalTime.split(':')[1]}:00`;
         }
         if (reminderAt) {
-          body.reminderAt = `${reminderAt}:00`;
+          body.reminderAt = new Date(reminderAt).toISOString();
         }
       }
       await apiFetch(`/appointments/${appointmentId}`, {
