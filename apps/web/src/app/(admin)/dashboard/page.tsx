@@ -1089,6 +1089,9 @@ function AppointmentDetailModal({
   const [arrivalDate, setArrivalDate] = useState('');
   const [arrivalTime, setArrivalTime] = useState('09:00');
   const [reminderAt, setReminderAt] = useState('');
+  const [editClientLastName, setEditClientLastName] = useState('');
+  const [editClientFirstName, setEditClientFirstName] = useState('');
+  const [editClientMiddleName, setEditClientMiddleName] = useState('');
   const [plannedItems, setPlannedItems] = useState<PlannedItem[]>([]);
   const [showAddPlanned, setShowAddPlanned] = useState(false);
   const [plannedTab, setPlannedTab] = useState<'LABOR' | 'PART'>('LABOR');
@@ -1117,6 +1120,9 @@ function AppointmentDetailModal({
     if (appointment && !initialized) {
       setNotes(appointment.notes || '');
       setAdvisorId(appointment.advisor?.id || '');
+      setEditClientFirstName(appointment.client.firstName || '');
+      setEditClientLastName(appointment.client.lastName || '');
+      setEditClientMiddleName(appointment.client.middleName || '');
       if (appointment.plannedItems && Array.isArray(appointment.plannedItems)) {
         setPlannedItems(appointment.plannedItems as PlannedItem[]);
       }
@@ -1227,6 +1233,21 @@ function AppointmentDetailModal({
           body.reminderAt = new Date(reminderAt).toISOString();
         }
       }
+      // Save client edits if changed
+      if (appointment && column === 'estimating' && (
+        editClientLastName !== (appointment.client.lastName || '') ||
+        editClientFirstName !== appointment.client.firstName ||
+        editClientMiddleName !== (appointment.client.middleName || '')
+      )) {
+        await apiFetch(`/users/${appointment.client.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            firstName: editClientFirstName,
+            lastName: editClientLastName || undefined,
+            middleName: editClientMiddleName || undefined,
+          }),
+        });
+      }
       await apiFetch(`/appointments/${appointmentId}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
@@ -1260,6 +1281,26 @@ function AppointmentDetailModal({
           setSaving(false);
           return;
         }
+        if (!editClientLastName || !editClientFirstName) {
+          setError('Заполните фамилию и имя клиента');
+          setSaving(false);
+          return;
+        }
+        // Save client data if it was edited
+        if (appointment && (
+          editClientLastName !== (appointment.client.lastName || '') ||
+          editClientFirstName !== appointment.client.firstName ||
+          editClientMiddleName !== (appointment.client.middleName || '')
+        )) {
+          await apiFetch(`/users/${appointment.client.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              firstName: editClientFirstName,
+              lastName: editClientLastName,
+              middleName: editClientMiddleName || undefined,
+            }),
+          });
+        }
         const scheduledStart = `${arrivalDate}T${arrivalTime}:00`;
         const endH = String(Math.min(Number(arrivalTime.split(':')[0]) + 1, 23)).padStart(2, '0');
         const scheduledEnd = `${arrivalDate}T${endH}:${arrivalTime.split(':')[1]}:00`;
@@ -1286,7 +1327,7 @@ function AppointmentDetailModal({
   const plannedLabors = plannedItems.filter((i) => i.type === 'LABOR');
   const plannedParts = plannedItems.filter((i) => i.type === 'PART');
   const plannedTotal = plannedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-  const canConfirm = column === 'estimating' ? !!(arrivalDate && plannedLabors.length > 0) : true;
+  const canConfirm = column === 'estimating' ? !!(arrivalDate && plannedLabors.length > 0 && editClientLastName && editClientFirstName) : true;
   const actionLabel = column === 'appeal' ? 'На согласование' : column === 'estimating' ? 'Подтвердить' : column === 'scheduled' ? 'Создать заказ-наряд' : null;
   const inputCls = 'mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500';
 
@@ -1306,18 +1347,47 @@ function AppointmentDetailModal({
         ) : appointment ? (
           <div className="mt-4 space-y-4">
             {/* Client info */}
-            <div className="cursor-pointer rounded-lg bg-gray-50 p-3 transition-colors hover:bg-primary-50/50 hover:ring-1 hover:ring-primary-300" onClick={() => setSubModal('client')}>
-              <p className="text-xs font-medium text-gray-500">Клиент</p>
-              <p className="text-sm font-semibold text-gray-900">
-                {appointment.client.lastName} {appointment.client.firstName}{appointment.client.middleName ? ` ${appointment.client.middleName}` : ''}
-              </p>
-              {appointment.client.phone && (
-                <p className="text-xs text-gray-600">{appointment.client.phone}</p>
-              )}
-              {appointment.client.email && (
-                <p className="text-xs text-gray-500">{appointment.client.email}</p>
-              )}
-            </div>
+            {column === 'estimating' && !appointment.client.lastName ? (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                <p className="text-xs font-medium text-amber-700">Клиент — заполните данные</p>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  <input
+                    placeholder="Фамилия *"
+                    value={editClientLastName}
+                    onChange={(e) => setEditClientLastName(e.target.value)}
+                    className={inputCls}
+                  />
+                  <input
+                    placeholder="Имя *"
+                    value={editClientFirstName}
+                    onChange={(e) => setEditClientFirstName(e.target.value)}
+                    className={inputCls}
+                  />
+                  <input
+                    placeholder="Отчество"
+                    value={editClientMiddleName}
+                    onChange={(e) => setEditClientMiddleName(e.target.value)}
+                    className={inputCls}
+                  />
+                </div>
+                {appointment.client.phone && (
+                  <p className="mt-1.5 text-xs text-gray-600">{appointment.client.phone}</p>
+                )}
+              </div>
+            ) : (
+              <div className="cursor-pointer rounded-lg bg-gray-50 p-3 transition-colors hover:bg-primary-50/50 hover:ring-1 hover:ring-primary-300" onClick={() => setSubModal('client')}>
+                <p className="text-xs font-medium text-gray-500">Клиент</p>
+                <p className="text-sm font-semibold text-gray-900">
+                  {appointment.client.lastName} {appointment.client.firstName}{appointment.client.middleName ? ` ${appointment.client.middleName}` : ''}
+                </p>
+                {appointment.client.phone && (
+                  <p className="text-xs text-gray-600">{appointment.client.phone}</p>
+                )}
+                {appointment.client.email && (
+                  <p className="text-xs text-gray-500">{appointment.client.email}</p>
+                )}
+              </div>
+            )}
 
             {/* Vehicle info */}
             <div className="cursor-pointer rounded-lg bg-gray-50 p-3 transition-colors hover:bg-primary-50/50 hover:ring-1 hover:ring-primary-300" onClick={() => setSubModal('vehicle')}>
