@@ -90,8 +90,23 @@ export class SpravochnikService implements OnModuleInit {
       DELETE FROM vehicle_part_stats WHERE "tenantId" = ${tenantId}
     `;
 
-    // 2. Aggregate from work_order_items
+    // 2. Aggregate from work_order_items with per-service relevance
+    //    relevance = WOs with this service+part / WOs with this service (not all WOs)
     const result = await this.prisma.$executeRaw`
+      WITH svc_counts AS (
+        SELECT
+          wo."tenantId",
+          UPPER(v.make) AS make,
+          UPPER(v.model) AS model,
+          labor.description AS svc_desc,
+          COUNT(DISTINCT wo.id)::int AS cnt
+        FROM work_order_items labor
+        JOIN work_orders wo ON labor."workOrderId" = wo.id
+        JOIN vehicles v ON wo."vehicleId" = v.id
+        WHERE labor.type = 'LABOR'
+          AND wo."tenantId" = ${tenantId}
+        GROUP BY wo."tenantId", UPPER(v.make), UPPER(v.model), labor.description
+      )
       INSERT INTO vehicle_part_stats (
         "tenantId", make, model, "serviceDescription",
         "partId", "partName", "partSku", "partBrand",
@@ -111,7 +126,7 @@ export class SpravochnikService implements OnModuleInit {
         COUNT(DISTINCT wo.id)::int,
         ROUND(
           COUNT(DISTINCT wo.id)::numeric * 100.0
-          / NULLIF(total_wo.cnt, 0),
+          / NULLIF(sc.cnt, 0),
           2
         )
       FROM work_order_items labor
@@ -121,26 +136,23 @@ export class SpravochnikService implements OnModuleInit {
         ON labor."workOrderId" = part."workOrderId"
         AND part.type = 'PART'
       LEFT JOIN parts p ON part."partId" = p.id
-      LEFT JOIN LATERAL (
-        SELECT COUNT(DISTINCT wo2.id)::int AS cnt
-        FROM work_orders wo2
-        JOIN vehicles v2 ON wo2."vehicleId" = v2.id
-        WHERE wo2."tenantId" = wo."tenantId"
-          AND UPPER(v2.make) = UPPER(v.make)
-          AND UPPER(v2.model) = UPPER(v.model)
-      ) total_wo ON true
+      JOIN svc_counts sc
+        ON sc."tenantId" = wo."tenantId"
+        AND sc.make = UPPER(v.make)
+        AND sc.model = UPPER(v.model)
+        AND sc.svc_desc = labor.description
       WHERE labor.type = 'LABOR'
         AND wo."tenantId" = ${tenantId}
       GROUP BY
         wo."tenantId", UPPER(v.make), UPPER(v.model),
         labor.description, part."partId", part.description,
-        p.sku, p.brand, total_wo.cnt
+        p.sku, p.brand, sc.cnt
       HAVING COUNT(*) >= 2
         AND ROUND(
           COUNT(DISTINCT wo.id)::numeric * 100.0
-          / NULLIF(total_wo.cnt, 0),
+          / NULLIF(sc.cnt, 0),
           2
-        ) >= 10
+        ) >= 35
     `;
 
     this.logger.log(`Справочник тенанта ${tenantId}: вставлено ${result} строк`);
@@ -268,13 +280,8 @@ export class SpravochnikService implements OnModuleInit {
       serviceMap.get(row.serviceDescription)!.parts.push(row);
     }
 
-    // Helper: check if a part name matches any complaint keyword
-    const matchesAnyKeyword = (name: string): boolean => {
-      const lower = name.toLowerCase();
-      return patterns.some((p) => lower.includes(p.replace(/%/g, '')));
-    };
-
-    // Build result with real catalog data, filtering parts by complaint keywords
+    // Build result with real catalog data
+    // Parts are already filtered by per-service relevance ≥35% in the stats table
     const services = [...serviceMap.values()].map((svc) => {
       // Find best matching catalog service
       const catalogMatch = catalogServices.find(
@@ -283,18 +290,12 @@ export class SpravochnikService implements OnModuleInit {
           svc.serviceDescription.toLowerCase().includes(cs.name.substring(0, 20).toLowerCase()),
       );
 
-      // Filter parts: keep only those whose name matches complaint keywords
-      const relevantParts = svc.parts.filter((p) => {
-        const realPart = p.partId ? partMap.get(p.partId) : null;
-        return matchesAnyKeyword(p.partName) || (realPart ? matchesAnyKeyword(realPart.name) : false);
-      });
-
       return {
         serviceDescription: svc.serviceDescription,
         serviceId: catalogMatch?.id || null,
         serviceName: catalogMatch?.name || null,
         servicePrice: catalogMatch ? Number(catalogMatch.price) : null,
-        parts: relevantParts.map((p) => {
+        parts: svc.parts.map((p) => {
           const realPart = p.partId ? partMap.get(p.partId) : null;
           return {
             partId: p.partId,
