@@ -611,7 +611,7 @@ function CreateAppointmentModal({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const { data: clients, refetch: refetchClients } = useQuery<{ data: { id: string; firstName: string; lastName: string; phone: string | null; email: string }[] }>({
+  const { data: clients, refetch: refetchClients } = useQuery<{ data: { id: string; firstName: string; lastName: string; middleName: string | null; phone: string | null; email: string }[] }>({
     queryKey: ['clients-for-appt', debouncedClientSearch],
     queryFn: () => apiFetch(`/users?limit=20&sort=lastName&order=asc&role=CLIENT${debouncedClientSearch.length >= 2 ? `&search=${encodeURIComponent(debouncedClientSearch)}` : ''}`),
     enabled: !isNewClient && debouncedClientSearch.length >= 2,
@@ -833,7 +833,7 @@ function CreateAppointmentModal({
                         type="button"
                         onClick={() => {
                           setClientId(c.id);
-                          setClientLabel(`${c.lastName} ${c.firstName}${c.phone ? ` (${c.phone})` : ''}`);
+                          setClientLabel(`${c.lastName} ${c.firstName}${c.middleName ? ` ${c.middleName}` : ''}${c.phone ? ` (${c.phone})` : ''}`);
                           setClientSearch('');
                           setShowClientDropdown(false);
                           setVehicleId('');
@@ -841,7 +841,7 @@ function CreateAppointmentModal({
                         }}
                         className="flex w-full flex-col px-3 py-2 text-left hover:bg-primary-50"
                       >
-                        <span className="text-sm font-medium text-gray-900">{c.lastName} {c.firstName}</span>
+                        <span className="text-sm font-medium text-gray-900">{c.lastName} {c.firstName}{c.middleName ? ` ${c.middleName}` : ''}</span>
                         <span className="text-xs text-gray-500">{c.phone || c.email}</span>
                       </button>
                     ))}
