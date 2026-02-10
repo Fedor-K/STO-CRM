@@ -3841,7 +3841,7 @@ function AiWorkOrderModal({ onClose, onSuccess }: { onClose: () => void; onSucce
                         <span className="truncate block">{p.name} {p.quantity > 1 && `x${p.quantity}`}</span>
                         {p.sku && <span className="text-xs text-gray-400">{p.sku}</span>}
                       </div>
-                      {p.usageCount && <span className="whitespace-nowrap text-xs text-emerald-600">{p.usageCount}x</span>}
+                      {p.usageCount && <span className="whitespace-nowrap text-xs text-emerald-600" title={`Использовалась ${p.usageCount} раз в прошлых ЗН`}>({p.usageCount} ЗН)</span>}
                       <span className="whitespace-nowrap text-gray-500">{formatMoney(p.sellPrice)}</span>
                       {!p.inStock && <span className="text-xs text-red-500 whitespace-nowrap">нет на складе</span>}
                     </label>
