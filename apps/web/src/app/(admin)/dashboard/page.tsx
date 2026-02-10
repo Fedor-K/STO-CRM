@@ -1259,7 +1259,7 @@ function AppointmentDetailModal({
   return (
     <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
-      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${column === 'estimating' || (column === 'scheduled' && plannedItems.length > 0) ? 'max-w-5xl' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
+      <div className={`max-h-[90vh] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${column === 'estimating' || (column === 'scheduled' && plannedItems.length > 0) ? 'max-w-[95vw]' : 'max-w-lg'}`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-gray-900">
             {column === 'appeal' ? 'Обращение' : column === 'estimating' ? 'Согласование' : 'Запись'}
@@ -3442,26 +3442,25 @@ function SearchablePartSelect({
       />
       {showDropdown && data?.data && data.data.length > 0 && (
         <div className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-          <div className="sticky top-0 grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+          <div className="sticky top-0 grid grid-cols-[1fr_minmax(80px,auto)_auto_auto_auto] gap-2 border-b border-gray-100 bg-gray-50 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-400">
             <span>Название</span>
-            <span className="w-24 text-right">Артикул</span>
+            <span>Производитель</span>
+            <span className="w-28 text-right">Артикул</span>
             <span className="w-16 text-center">Остаток</span>
-            <span className="w-20 text-right">Цена</span>
+            <span className="w-24 text-right">Цена</span>
           </div>
           {data.data.map((p) => (
             <button
               key={p.id}
               type="button"
               onClick={() => { onSelect(p); setSearch(''); setShowDropdown(false); }}
-              className="grid w-full grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 text-left hover:bg-primary-50"
+              className="grid w-full grid-cols-[1fr_minmax(80px,auto)_auto_auto_auto] gap-2 px-3 py-2 text-left hover:bg-primary-50"
             >
-              <span className="text-sm text-gray-900 truncate">
-                {p.name}
-                {p.brand && <span className="ml-1 text-xs text-gray-400">{p.brand}</span>}
-              </span>
-              <span className="w-24 truncate text-right text-xs text-gray-400">{p.sku || '—'}</span>
+              <span className="text-sm text-gray-900 truncate">{p.name}</span>
+              <span className="text-xs text-gray-500 truncate">{p.brand || '—'}</span>
+              <span className="w-28 truncate text-right text-xs text-gray-400">{p.sku || '—'}</span>
               <span className={`w-16 text-center text-xs font-medium ${p.currentStock > 0 ? 'text-green-600' : 'text-red-500'}`}>{p.currentStock ?? 0}</span>
-              <span className="w-20 text-right text-xs text-gray-500 whitespace-nowrap">{formatMoney(p.sellPrice)}</span>
+              <span className="w-24 text-right text-xs text-gray-500 whitespace-nowrap">{formatMoney(p.sellPrice)}</span>
             </button>
           ))}
         </div>
