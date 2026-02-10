@@ -1108,24 +1108,26 @@ function AppointmentDetailModal({
     staleTime: 30_000,
   });
 
-  if (appointment && !initialized) {
-    setNotes(appointment.notes || '');
-    setAdvisorId(appointment.advisor?.id || '');
-    if (appointment.plannedItems && Array.isArray(appointment.plannedItems)) {
-      setPlannedItems(appointment.plannedItems as PlannedItem[]);
+  useEffect(() => {
+    if (appointment && !initialized) {
+      setNotes(appointment.notes || '');
+      setAdvisorId(appointment.advisor?.id || '');
+      if (appointment.plannedItems && Array.isArray(appointment.plannedItems)) {
+        setPlannedItems(appointment.plannedItems as PlannedItem[]);
+      }
+      if (column === 'estimating' && appointment.scheduledStart) {
+        const d = new Date(appointment.scheduledStart);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const h = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        setArrivalDate(`${y}-${m}-${day}`);
+        setArrivalTime(`${h}:${min}`);
+      }
+      setInitialized(true);
     }
-    if (column === 'estimating' && appointment.scheduledStart) {
-      const d = new Date(appointment.scheduledStart);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const h = String(d.getHours()).padStart(2, '0');
-      const min = String(d.getMinutes()).padStart(2, '0');
-      setArrivalDate(`${y}-${m}-${day}`);
-      setArrivalTime(`${h}:${min}`);
-    }
-    setInitialized(true);
-  }
+  }, [appointment, initialized]);
 
   async function handleDecline() {
     if (!declineReason) {
