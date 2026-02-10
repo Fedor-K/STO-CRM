@@ -30,6 +30,7 @@ interface AppointmentCard {
   status: string;
   notes: string | null;
   reminderAt: string | null;
+  createdAt: string;
   client: { id: string; firstName: string; lastName: string; middleName: string | null; phone: string | null };
   vehicle: { id: string; make: string; model: string; licensePlate: string | null; mileage: number | null };
 }
@@ -418,11 +419,12 @@ function AppointmentFunnelCard({
 
   const actionLabel = column === 'appeal' ? 'На согласование →' : column === 'scheduled' ? 'Создать ЗН →' : null;
   const isOverdue = column === 'estimating' && appointment.reminderAt && new Date(appointment.reminderAt) < new Date();
+  const isUrgent = column === 'appeal' && (Date.now() - new Date(appointment.createdAt).getTime()) > 15 * 60 * 1000;
 
   return (
     <div
       onClick={onClick}
-      className={`cursor-pointer rounded-lg border p-2.5 shadow-sm transition hover:shadow-md ${isOverdue ? 'border-red-500 bg-red-50 hover:border-red-400' : 'border-gray-200 bg-white hover:border-primary-300'}`}
+      className={`cursor-pointer rounded-lg border p-2.5 shadow-sm transition hover:shadow-md ${isUrgent ? 'animate-urgent-pulse border-red-600 bg-red-100' : isOverdue ? 'border-red-500 bg-red-50 hover:border-red-400' : 'border-gray-200 bg-white hover:border-primary-300'}`}
     >
       <div className="text-sm font-medium text-gray-900">
         {appointment.client.lastName} {appointment.client.firstName}{appointment.client.middleName ? ` ${appointment.client.middleName}` : ''}
