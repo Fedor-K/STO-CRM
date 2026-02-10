@@ -7,7 +7,7 @@ import { WorkOrdersService } from '../work-orders/work-orders.service';
 import { AppointmentsService } from '../appointments/appointments.service';
 import { UsersService } from '../users/users.service';
 import { VehiclesService } from '../vehicles/vehicles.service';
-import { buildSystemPrompt, buildAdjustPrompt, type VehicleHistoryEntry } from './ai-prompt';
+import { buildParseOnlyPrompt, buildSystemPrompt, buildAdjustPrompt, type VehicleHistoryEntry } from './ai-prompt';
 import { SpravochnikService } from './spravochnik.service';
 
 interface ParsedAiResult {
@@ -101,7 +101,7 @@ export class AiWorkOrderService {
       throw new BadRequestException('AI-функция не настроена: ANTHROPIC_API_KEY не задан');
     }
 
-    // 1. Load only mechanics (AI no longer selects services/parts — spravochnik does)
+    // 1. Load mechanics
     const mechanicsRaw = await this.prisma.user.findMany({
       where: { tenantId, role: 'MECHANIC', isActive: true },
       select: {
@@ -119,14 +119,12 @@ export class AiWorkOrderService {
       activeOrdersCount: (m as any)._count.workOrdersAsMechanic,
     }));
 
-    // 2. Build system prompt (lightweight — only mechanics, no catalogs)
-    const systemPrompt = buildSystemPrompt([], [], mechanics);
-
-    // 3. Call Claude for text parsing only
+    // 2. Call Claude with lightweight prompt (parse only, no catalogs)
+    const parsePrompt = buildParseOnlyPrompt(mechanics);
     const message = await this.anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1000,
-      system: systemPrompt,
+      system: parsePrompt,
       messages: [{ role: 'user', content: description }],
     });
 
@@ -253,7 +251,6 @@ export class AiWorkOrderService {
         if (recs.services.length > 0) {
           spravochnikUsed = true;
 
-          // Build services from spravochnik
           finalServices = recs.services
             .filter((s) => s.serviceId)
             .map((s) => ({
@@ -261,10 +258,8 @@ export class AiWorkOrderService {
               name: s.serviceName || s.serviceDescription,
               price: s.servicePrice || 0,
               normHours: 0,
-              usageCount: undefined as number | undefined,
             }));
 
-          // Build parts from spravochnik (with current catalog price/stock)
           const allSpravParts = recs.services.flatMap((s) => s.parts);
           const uniqueParts = new Map<string, typeof allSpravParts[0]>();
           for (const p of allSpravParts) {
@@ -284,6 +279,66 @@ export class AiWorkOrderService {
         }
       } catch (e) {
         this.logger.warn(`Ошибка справочника, используем AI-подбор: ${e}`);
+      }
+    }
+
+    // 7. Fallback: if spravochnik returned nothing, call AI with full catalogs
+    if (!spravochnikUsed) {
+      try {
+        const stopWords = new Set(['это','что','как','для','при','его','она','они','был','была','будет','нужно','нужна','просит','говорит','также','приехал','приехала','госномер','номер','год','года','замена','замену','заменить','поменять','менять','ремонт','сделать','проверить','нужен','нужны','очень','еще','который','которая','которые','автомобиль','машина','машину','авто']);
+        const kws = description.toLowerCase().replace(/[^а-яёa-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3).filter((w) => !stopWords.has(w));
+        const uniqueKws = [...new Set(kws)];
+        const kwFilter = uniqueKws.length > 0 ? { OR: uniqueKws.map((kw) => ({ name: { contains: kw, mode: 'insensitive' as const } })) } : {};
+
+        const [svcList, topSvc, partList, topParts] = await Promise.all([
+          this.prisma.service.findMany({ where: { tenantId, isActive: true, ...kwFilter }, select: { id: true, name: true, price: true, normHours: true }, take: 150 }),
+          this.prisma.service.findMany({ where: { tenantId, isActive: true, OR: [{ name: { contains: 'диагностик', mode: 'insensitive' } }, { name: { contains: 'ТО ', mode: 'insensitive' } }] }, select: { id: true, name: true, price: true, normHours: true }, take: 30 }),
+          this.prisma.part.findMany({ where: { tenantId, ...kwFilter }, select: { id: true, name: true, brand: true, sku: true, sellPrice: true, currentStock: true }, take: 200 }),
+          this.prisma.part.findMany({ where: { tenantId, currentStock: { gt: 0 } }, select: { id: true, name: true, brand: true, sku: true, sellPrice: true, currentStock: true }, orderBy: { currentStock: 'desc' }, take: 50 }),
+        ]);
+
+        const svcMap = new Map<string, typeof svcList[0]>();
+        for (const s of [...svcList, ...topSvc]) svcMap.set(s.id, s);
+        const services = [...svcMap.values()].slice(0, 250);
+
+        const pMap = new Map<string, typeof partList[0]>();
+        for (const p of [...partList, ...topParts]) pMap.set(p.id, p);
+        const parts = [...pMap.values()].slice(0, 250);
+
+        const fullPrompt = buildSystemPrompt(
+          services.map((s) => ({ ...s, price: Number(s.price), normHours: s.normHours ? Number(s.normHours) : null })),
+          parts.map((p) => ({ ...p, sellPrice: Number(p.sellPrice) })),
+          mechanics,
+        );
+
+        const msg2 = await this.anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 2000,
+          system: fullPrompt,
+          messages: [{ role: 'user', content: description }],
+        });
+
+        const tb2 = msg2.content.find((b) => b.type === 'text');
+        if (tb2 && tb2.type === 'text') {
+          let json2 = tb2.text.trim();
+          if (json2.startsWith('```')) json2 = json2.replace(/^```(?:json)?\s*\n?/, '').replace(/\n?```\s*$/, '');
+          const p2: ParsedAiResult = JSON.parse(json2);
+
+          const serviceIds = new Set(services.map((s) => s.id));
+          const partIds = new Set(parts.map((p) => p.id));
+
+          finalServices = (p2.suggestedServices || []).filter((s) => serviceIds.has(s.serviceId)).map((s) => {
+            const svc = services.find((sv) => sv.id === s.serviceId);
+            return { serviceId: s.serviceId, name: svc?.name || s.name, price: Number(svc?.price ?? s.price), normHours: svc?.normHours ? Number(svc.normHours) : s.normHours };
+          });
+
+          finalParts = (p2.suggestedParts || []).filter((p) => partIds.has(p.partId)).map((p) => {
+            const part = parts.find((pt) => pt.id === p.partId);
+            return { partId: p.partId, name: part?.name || p.name, sku: part?.sku || null, sellPrice: Number(part?.sellPrice ?? p.sellPrice), quantity: p.quantity || 1, inStock: (part?.currentStock ?? 0) >= (p.quantity || 1) };
+          });
+        }
+      } catch (e) {
+        this.logger.warn(`AI fallback ошибка: ${e}`);
       }
     }
 
